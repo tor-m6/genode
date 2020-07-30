@@ -374,7 +374,7 @@ extern "C" __attribute__((weak))
 int pselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
             const struct timespec *timeout, const sigset_t *sigmask)
 {
-	struct timeval tv;
+	struct timeval tv { 0, 0 };
 	sigset_t origmask;
 	int nready;
 
