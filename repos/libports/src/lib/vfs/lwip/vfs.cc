@@ -1683,12 +1683,10 @@ err_t tcp_sent_callback(void *arg, struct tcp_pcb *pcb, u16_t)
 
 
 static
-void tcp_err_callback(void *arg, err_t err)
+void tcp_err_callback(void *arg, err_t)
 {
-	if (!arg) {
-		Genode::error("tcp_err_callback arg=null err=", (int)err);
-		return;
-	}
+	if (!arg) return;
+
 	Lwip::Tcp_socket_dir *socket_dir = static_cast<Lwip::Tcp_socket_dir *>(arg);
 	socket_dir->error();
 	/* the error is ERR_ABRT or ERR_RST, both end the session */
