@@ -1867,65 +1867,6 @@ diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libg
 +	n := uintptr(unsafe.Pointer(&r[0]))
  	extendRandom(r, int(n))
  }
-diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/os_netbsd.go inno/libgo/go/runtime/os_netbsd.go
---- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/os_netbsd.go	2018-01-09 04:23:08.000000000 +0300
-+++ inno/libgo/go/runtime/os_netbsd.go	2020-06-23 01:18:02.000000000 +0300
-@@ -19,7 +19,9 @@
- 
- //go:noescape
- //extern lwp_unpark
--func lwp_unpark(lwp int32, hint unsafe.Pointer) int32
-+func lwp_unpark(lwp int32, hint unsafe.Pointer) int32 {
-+        return 0
-+}
- 
- //go:nosplit
- func semacreate(mp *m) {
-@@ -27,42 +29,8 @@
- 
- //go:nosplit
- func semasleep(ns int64) int32 {
--	_g_ := getg()
--
--	// Compute sleep deadline.
--	var tsp *timespec
--	var ts timespec
--	if ns >= 0 {
--		var nsec int32
--		ts.set_sec(int64(timediv(ns, 1000000000, &nsec)))
--		ts.set_nsec(nsec)
--		tsp = &ts
--	}
--
--	for {
--		v := atomic.Load(&_g_.m.mos.waitsemacount)
--		if v > 0 {
--			if atomic.Cas(&_g_.m.mos.waitsemacount, v, v-1) {
--				return 0 // semaphore acquired
--			}
--			continue
--		}
--
--		// Sleep until unparked by semawakeup or timeout.
--		ret := lwp_park(_CLOCK_MONOTONIC, _TIMER_RELTIME, tsp, 0, unsafe.Pointer(&_g_.m.waitsemacount), nil)
--		if ret == _ETIMEDOUT {
--			return -1
--		} else if ret == _EINTR && ns >= 0 {
--			// Avoid sleeping forever if we keep getting
--			// interrupted (for example by the profiling
--			// timer). It would be if tsp upon return had the
--			// remaining time to sleep, but this is good enough.
--			var nsec int32
--			ns /= 2
--			ts.set_sec(timediv(ns, 1000000000, &nsec))
--			ts.set_nsec(nsec)
--		}
--	}
-+	// FIXME
-+	return 0;
- }
- 
- //go:nosplit
 diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/pprof/pprof_test.go inno/libgo/go/runtime/pprof/pprof_test.go
 --- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/pprof/pprof_test.go	2018-01-26 02:10:35.000000000 +0300
 +++ inno/libgo/go/runtime/pprof/pprof_test.go	2020-06-23 01:18:02.000000000 +0300
@@ -2426,19 +2367,6 @@ diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libg
  	filename = NULL;
  
        back_state = backtrace_create_state (filename, 1, error_callback, NULL);
-diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/runtime/go-main.c inno/libgo/runtime/go-main.c
---- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/runtime/go-main.c  2017-07-19 02:14:29.000000000 +0300
-+++ inno/libgo/runtime/go-main.c        2020-07-31 01:38:40.000000000 +0300
-@@ -51,7 +51,8 @@
-   runtime_cpuinit ();
-   runtime_check ();
-   runtime_args (argc, (byte **) argv);
--  setncpu (getproccount ());
-+  // setncpu (getproccount ());
-+  setncpu (1);
-   setpagesize (getpagesize ());
-   runtime_sched = runtime_getsched();
-   runtime_schedinit ();
 diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/runtime/go-setenv.c inno/libgo/runtime/go-setenv.c
 --- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/runtime/go-setenv.c	2016-11-18 19:03:13.000000000 +0300
 +++ inno/libgo/runtime/go-setenv.c	2020-06-23 01:18:02.000000000 +0300
