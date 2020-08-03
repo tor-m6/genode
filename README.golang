@@ -1,24 +1,25 @@
 
 	This is initial port of golang to genode
 	========================================
-This work is a side result of one of research project made in Innopolis University.
+This work is a side result of one of the research project made in Innopolis University.
 						(c) Alex Tormasov, tor@innopolis.ru
-It allow compilation and run of simple go applications and packages (probably without unsupported os features).
-I use only gccgo version of golang compiler, so, things like "go build" in cross mode not supported.
+It allow compilation and execution of simple go applications/packages (probably without unsupported os features).
+I use only gccgo version of golang compiler. Things like "go build" in cross mode not supported yet (while we make
+some techology to produce makefiles from "go build" to compilei go code, not attached yet).
 Other limitations see below.
 
-It build a set of libraries, as libport and noux-pkg each (because we need to run configure), as static ones.
-Also it build a set of standard golang packages (as fmt, os, syscall, runtime/etc) as object files suitable for gccgo..
-Go runtinme support around 9 systems as backend, - I use netbsd as simplest one for the base for new system - "inno".
+It build a set of libraries, in form of "libport" and "noux-pkg" each (because we need to run configure which is not
+supported in libport), as static ones.
+Also it build a set of standard golang packages (namely fmt, os, syscall, runtime/etc) as files for gccgo compilation.
+Note: Go runtinme support around 9 systems as backend. I use netbsd as simplest one for the base for new system - "inno".
 
-To implement context switching I have to manually make it, and use alloc_secondary_stack() from Genode.
-I suspect that I need to use a low level context switching from kernel (native thread switch from kernel), this is
-not implemented yet.
+To implement context switching I have to develop it from the scratch; for stack it use alloc_secondary_stack() from Genode.
+I suspect that I need to use a low-level context switching from kernel (native thread switch), this is not implemented yet.
 
 	Installation instruction
 	========================
 0. setup genode on appropriate platform using https://github.com/tor-m6/genode.git, configure toolchain and prepare
-   code to compile, apply my patches to genode, setup environment like (replace by your own dirs):
+   code to compile, setup environment, e.g. (replace by your own dirs):
 	export PATH=/usr/local/genode/tool/current/bin:/media/psf/Home/gen/20.05/build/tool_chain-19.05/install/bin:$PATH
 	export AS=genode-x86-as
 	export LD=genode-x86-ld
@@ -30,6 +31,19 @@ not implemented yet.
 	export READELF=genode-x86-readelf
 	export AR=genode-x86-ar
 	export NM=genode-x86-gcc-nm
+   add to begining of build/x86_64/etc/build.conf something like (correct dirs):
+	GENODE_DIR  := <your genode dir>
+	BASE_DIR    := $(GENODE_DIR)/repos/base
+	CONTRIB_DIR := $(GENODE_DIR)/contrib
+
+	# toolchain prefix
+	export CROSS_DEV_PREFIX:=/usr/local/genode/tool/current/bin/genode-x86-
+	# compiler for GO
+	export GOC := /usr/local/genode/tool/current/bin/genode-x86-gccgo
+	# stack options
+	CC_OLEVEL := -O0 -fno-omit-frame-pointer
+	export CC_OLEVEL:=$(CC_OLEVEL)
+	...
    and finally cd to genode dir
 1. prepare ports from genode, e.g. by
 	./tool/ports/prepare_port libc nova x86emu stdcxx grub2
@@ -44,6 +58,7 @@ not implemented yet.
 	make -C build/x86_64/ KERNEL=nova CFLAGS="-g -O0 -fno-omit-frame-pointer" run/go_app
 
 target.mk for test app:
+
 TARGET = test-go
 SRC_GO = main.go
 # important! file mycontext.cc shdould be complied with -fno-omit-frame-pointer with my .s file
@@ -86,8 +101,8 @@ CC_CXX_WARN_STRICT =
 	
 	Configuration after build
 	=========================
-Golang packages (like fmt) is a object files like fmt.o which appears in build/x86_64/noux-pkg/libgo/ directory and
-subdirectories, this path should be included during golang/gccgo compilation (not only linking). Build libraries for Go
+Golang package (like fmt) is an object file (e.g. fmt.o) which appears in build/x86_64/noux-pkg/libgo/ directory and
+subdirectories. This path should be included during golang/gccgo compilation (not only linking). Built libraries for Go
 will be in ${LIB_CACHE_DIR}/libgo/libgobegin.a ${LIB_CACHE_DIR}/libgo/libgolibbegin.a ${LIB_CACHE_DIR}/libgo/libgo.a
 
 Sequnce of libraries in target.mk is important, otherwise you can hit problem that libc heap initialization in libc.lib.so
@@ -95,10 +110,10 @@ does not happens because some statical constructors do not called in proper orde
 
 	Debugging
 	=========
-On mosy systems (like seL4) you can use only debug print, and sometimes locking and output is tricky.
+On most systems (like seL4) you can use only debug print, and sometimes locking and output is tricky.
 You can use gdb to debug your application on nova (while gdb support in genode somehow limited, I found a lot of problems
-with improper breaks/etc); I use Parallels VM or qemu on Mac. To compile code for gdb please, take a look to 
-ports/run/go_app_dbg.run. For convenience my VSCode launch.json part (to run debugger from inside VSCode as frontend):
+with improper breaks/etc); I use Parallels VM or qemu on Mac. To compile code for gdb please, take a look at
+ports/run/go_app_dbg.run. For convenience my VSCode launch.json portion (to run debugger using VSCode as frontend):
         {
             "type": "gdb",
             "request": "attach",
@@ -129,10 +144,10 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json part (to run deb
 	Current limitations
 	===================
   -	RAM quota in .run file should be >= 1300M:
-	genode do not support MAP_ANON flag, so, cant reserve memory (544Gb) for arena, and, therefore, go to Windows-like model
-	with small immediate allocation; force 2GB limitation in code and make direct allocation of ~1.1Gb
+	genode do not support MAP_ANON flag, so, we cant reserve memory (544Gb) for arena, and, therefore, go to Windows-like model
+	with "small" immediate allocation; it force 2GB limitation in code and make direct allocation of ~1.1Gb
   -	can run in VM with 1 CPU only:
-	in general it support checking of CPU number (by taking patch from staging code, applied separately) and trying to run
+	in general it support checking of CPU number (by backporting patch from current genode code) and trying to run
 	everything, but it hangs somewhere in the middle due to recursive locking (error "deadlock ahead" in acquire() in mutex.cc)
 		May be this is small mistake - don't have time to find and fix (in this place due to slot_jump() gdb do not give
 		normal info related to stack). I found that problem during stack unwind in  ... runtime.startm -> runtime.newm -> 
@@ -142,19 +157,20 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json part (to run deb
 	genode do not support makecontex/setcontext/gencontext family; but it is crucial to support go because of goroutine model;
 	I have to implement it by myself. It is machine-dependent; moreover, context swiching do not work after direct port from
 	libc/etc - I have to make 1 step stack unwind procedure to jump using stack frame to the next function. So, I add
-	evertwhere compilation option -fno-omit-frame-pointer to be sure that this approach works. Probably it need only for
-	implementation file mycontext.cc only (not sure for 100%)
-  -	it can work on seL4 as well, while I did not submit additional dirty changes to go runtime (I swithed to nova with gdb)
+	everywhere compilation option -fno-omit-frame-pointer to be sure that this approach works. Probably it need only for
+	implementation of the file mycontext.cc
+  -	it can work on seL4 as well, while I did not submit additional dirty changes for go runtime (I swithed to nova/gdb)
   -	any go application need to add 3 files into it
-		(may be it worth to place in another library or libgo.a) - dummy.cc with Genode initialization and some empty
+		(may be it worth to place them in another library or libgo.a) - dummy.cc with Genode initialization and some empty
 		functions which are not supported on genode, mycontext.cc and myacontext.s with implementation of x86 [sg]etcontext
-  -	during port I make a set of dirty fixes for absent on the platform (genode/nova), in particular dummy C implementaion of
+  -	during port I make a set of dirty fixes for absent on the platform (genode/nova), in particular "empty" C implementaion of
 	sendfile(), getpgid(), lchown(), mount(), settimeofday(), mlock(), munlock(), mlockall(), munlockall(), sigaltstack();
 	in go part of runtime port I also "damage" some functions, in particualr route.sysctl(), broke poll.ReadDirent(), partially
 	broke logic in runtime.sysMap/sysReserve because of unsupported mem range reservation, do not use ptrace, broke routing in
 	netbsd version of syscall.toRoutingMessage and some others, see patches for libgo in repos/libports/src/lib/libgo/.
-	so, anything in Golang which use them will fail. Potentially new genode releases will contain somethin which can replace
-	or fix these and other patched functions.
+	so, anything in Golang which use them will fail. Potentially new genode releases will contain something which can replace
+	or fix these and other patched functions
+  -	once I compile all code with -O3 option, and it hangs. I did not check why...
 
 Questions? tor@innopolis.ru, origin in https://github.com/tor-m6/genode.git
 Requests to fix/improve/etc? Sorry, in this moment no plans to support this port in the future.
