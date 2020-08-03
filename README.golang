@@ -2,8 +2,9 @@
 	This is initial port of golang to genode
 	========================================
 This work is a side result of one of the research project made in Innopolis University.
-						(c) Alex Tormasov, tor@innopolis.ru
-It allow compilation and execution of simple go applications/packages (probably without unsupported os features).
+	(c) Alex Tormasov, tor@innopolis.ru - port itsels, Alexey Semenov aleks.semenov@innopolis.ru - build
+
+It allow compilation and execution of simple go applications/packages (without unsupported OS/platform features).
 I use only gccgo version of golang compiler. Things like "go build" in cross mode not supported yet (while we make
 some techology to produce makefiles from "go build" to compilei go code, not attached yet).
 Other limitations see below.
@@ -171,7 +172,9 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json portion (to run 
 	so, anything in Golang which use them will fail. Potentially new genode releases will contain something which can replace
 	or fix these and other patched functions
   -	once I compile all code with -O3 option, and it hangs. I did not check why...
+  -	networking: never try, need to integrate with other ports, and see above about broken syscalls/routing/etc.
 
-Questions? tor@innopolis.ru, origin in https://github.com/tor-m6/genode.git
-Requests to fix/improve/etc? Sorry, in this moment no plans to support this port in the future.
+Questions? tor@innopolis.ru - related to port, Alexey Semenov aleks.semenov@innopolis.ru - related to build process.
+Origin in https://github.com/tor-m6/genode.git
+Requests to fix/improve/etc? Sorry, in this moment no plans to support this port in the future, no promises (while somethin easy can be done).
 
