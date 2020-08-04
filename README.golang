@@ -5,6 +5,8 @@ This work is a side result of one of the research project made in Innopolis Univ
 	(c) Alex Tormasov, tor@innopolis.ru - port itsels, Alexey Semenov aleks.semenov@innopolis.ru - build
 
 It allow compilation and execution of simple go applications/packages (without unsupported OS/platform features).
+In this moment it supports nova and sel4 kernels on x86 platform.
+
 I use only gccgo version of golang compiler. Things like "go build" in cross mode not supported yet (while we make
 some techology to produce makefiles from "go build" to compilei go code, not attached yet).
 Other limitations see below.
@@ -154,7 +156,7 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json portion (to run 
 		normal info related to stack). I found that problem during stack unwind in  ... runtime.startm -> runtime.newm -> 
 		runtime.newm -> runtime.mcommoninit -> runtime.callers -> runtime_callers() -> backtrace_full() ... 
 		here it try to call -> strlcpy() -> _jmp_slot() and make again guard inside this function
-   -	it works only on x86_64, tested on nova kernel
+   -	it works only on x86_64, tested on nova and sel4 kernels
 	genode do not support makecontex/setcontext/gencontext family; but it is crucial to support go because of goroutine model;
 	I have to implement it by myself. It is machine-dependent; moreover, context swiching do not work after direct port from
 	libc/etc - I have to make 1 step stack unwind procedure to jump using stack frame to the next function. So, I add
@@ -172,7 +174,10 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json portion (to run 
 	so, anything in Golang which use them will fail. Potentially new genode releases will contain something which can replace
 	or fix these and other patched functions
   -	once I compile all code with -O3 option, and it hangs. I did not check why...
-  -	networking: never try, need to integrate with other ports, and see above about broken syscalls/routing/etc.
+  -	networking: never try, need to integrate with other ports, and see above about broken syscalls/routing/etc
+  -	exit() do not finished normally (at least with 20.05)
+	seems that atexit() do not terminates all threads correctly (some of them instead of termination try to access memory, 
+	e.g. to process the signals locally, while this memory are already released due to main thread termination).
 
 Questions? tor@innopolis.ru - related to port, Alexey Semenov aleks.semenov@innopolis.ru - related to build process.
 Origin in https://github.com/tor-m6/genode.git

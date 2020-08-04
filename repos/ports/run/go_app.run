@@ -20,12 +20,12 @@ install_config {
 		<default-route>
 			<any-service> <any-child/> <parent/> </any-service>
 		</default-route>
-		<default caps="100"/>
+		<default caps="200"/>
                 <start name="timer">
                         <resource name="RAM" quantum="2M"/>
                         <provides><service name="Timer"/></provides>
                 </start>
-		<start name="test-go" caps="100">
+		<start name="test-go" caps="200">
 			<resource name="RAM" quantum="1200M"/>
 			<config verbose="yes" ld_verbose="yes" >
 				<vfs> <dir name="dev"> <log/> </dir> </vfs>
