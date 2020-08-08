@@ -162,24 +162,23 @@ ports/run/go_app_dbg.run. For convenience my VSCode launch.json portion (to run 
 	libc/etc - I have to make 1 step stack unwind procedure to jump using stack frame to the next function. So, I add
 	everywhere compilation option -fno-omit-frame-pointer to be sure that this approach works. Probably it need only for
 	implementation of the file mycontext.cc
-  -	it can work on seL4 as well, while I did not submit additional dirty changes for go runtime (I swithed to nova/gdb)
   -	any go application need to add 3 files into it
-		(may be it worth to place them in another library or libgo.a) - dummy.cc with Genode initialization and some empty
-		functions which are not supported on genode, mycontext.cc and myacontext.s with implementation of x86 [sg]etcontext
+	dummy.cc: with Genode initialization and some empty functions which are not supported on genode
+	mycontext.cc:
+	myacontext.s: with implementation of x86 [sg]etcontext.
+	may be it worth to place them in another library or libgo.a?
   -	during port I make a set of dirty fixes for absent on the platform (genode/nova), in particular "empty" C implementaion of
 	sendfile(), getpgid(), lchown(), mount(), settimeofday(), mlock(), munlock(), mlockall(), munlockall(), sigaltstack();
 	in go part of runtime port I also "damage" some functions, in particualr route.sysctl(), broke poll.ReadDirent(), partially
-	broke logic in runtime.sysMap/sysReserve because of unsupported mem range reservation, do not use ptrace, broke routing in
-	netbsd version of syscall.toRoutingMessage and some others, see patches for libgo in repos/libports/src/lib/libgo/.
-	so, anything in Golang which use them will fail. Potentially new genode releases will contain something which can replace
-	or fix these and other patched functions
+	broke logic in runtime.sysMap/sysReserve because of unsupported mem range reservation, do not use ptrace,  and some others.
+	See patches for libgo in repos/libports/src/lib/libgo/. Anything in Golang which use them will fail.
+	Potentially new genode releases will contain something which can replace or fix these and other patched functions
   -	once I compile all code with -O3 option, and it hangs. I did not check why...
   -	networking: never try, need to integrate with other ports, and see above about broken syscalls/routing/etc
   -	exit() do not finished normally (at least with 20.05)
 	seems that atexit() do not terminates all threads correctly (some of them instead of termination try to access memory, 
 	e.g. to process the signals locally, while this memory are already released due to main thread termination).
 
-Questions? tor@innopolis.ru - related to port, Alexey Semenov aleks.semenov@innopolis.ru - related to build process.
+Questions? tor@innopolis.ru - related to port (and Alexey Semenov aleks.semenov@innopolis.ru - related to build process).
 Origin in https://github.com/tor-m6/genode.git
-Requests to fix/improve/etc? Sorry, in this moment no plans to support this port in the future, no promises (while somethin easy can be done).
 

@@ -401,9 +401,7 @@ __SYS_(void *, mmap, (void *addr, ::size_t length,
 {
 
 	/* handle requests for anonymous memory */
-	// FIXME! - in libgo for genode we need to handle MAP_ANON somehow to alloc arena/etc; dirty fix
-	if ((!addr && libc_fd == -1) || (flags & MAP_ANON)) {
-//	if (!addr && libc_fd == -1) {
+	if (!addr && libc_fd == -1) {
 		bool const executable = prot & PROT_EXEC;
 		void *start = mem_alloc(executable)->alloc(length, PAGE_SHIFT);
 		if (!start) {
