@@ -1180,72 +1180,6 @@ diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libg
  
  package runtime
  
-diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/malloc.go inno/libgo/go/runtime/malloc.go
---- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/malloc.go	2018-03-07 18:22:46.000000000 +0300
-+++ inno/libgo/go/runtime/malloc.go	2020-07-24 01:14:08.000000000 +0300
-@@ -156,7 +156,9 @@
- 	// On Darwin/arm64, we cannot reserve more than ~5GB of virtual memory,
- 	// but as most devices have less than 4GB of physical memory anyway, we
- 	// try to be conservative here, and only ask for a 2GB heap.
--	_MHeapMap_TotalBits = (_64bit*sys.GoosWindows)*35 + (_64bit*(1-sys.GoosWindows)*(1-sys.GoosDarwin*sys.GoarchArm64))*39 + sys.GoosDarwin*sys.GoarchArm64*31 + (1-_64bit)*(32-(sys.GoarchMips+sys.GoarchMipsle))
-+	// FIXME - 2GB
-+	//_MHeapMap_TotalBits = (_64bit*sys.GoosWindows)*35 + (_64bit*(1-sys.GoosWindows)*(1-sys.GoosDarwin*sys.GoarchArm64))*39 + sys.GoosDarwin*sys.GoarchArm64*31 + (1-_64bit)*(32-(sys.GoarchMips+sys.GoarchMipsle))
-+	_MHeapMap_TotalBits = 30
- 	_MHeapMap_Bits      = _MHeapMap_TotalBits - _PageShift
- 
- 	// _MaxMem is the maximum heap arena size minus 1.
-diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/mem_gccgo.go inno/libgo/go/runtime/mem_gccgo.go
---- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/mem_gccgo.go	2018-01-09 04:23:08.000000000 +0300
-+++ inno/libgo/go/runtime/mem_gccgo.go	2020-07-24 01:30:08.000000000 +0300
-@@ -42,7 +42,16 @@
- }
- 
- func mmap(addr unsafe.Pointer, n uintptr, prot, flags, fd int32, off uintptr) (unsafe.Pointer, int) {
--	p := sysMmap(addr, n, prot, flags, fd, off)
-+	myAddr := addr
-+	if GOOS == "inno" && (flags&_MAP_ANON != 0) {
-+		// FIXME(tor): Genode do not support anonymous mapping where a virtual address is specified
-+		// general anonymous mapping checked and processed in libc genode port in file_operations.cc:
-+		//	if (!addr && libc_fd == -1)
-+		//  ... anon mmap processing ...
-+		// libc_fd in genode is already -1, so, just setup addr as nil
-+		myAddr = nil
-+	}
-+	p := sysMmap(myAddr, n, prot, flags, fd, off)
- 	if uintptr(p) == _MAP_FAILED {
- 		return nil, errno()
- 	}
-@@ -232,19 +232,6 @@
- 	// much address space. Instead, assume that the reservation is okay
- 	// if we can reserve at least 64K and check the assumption in SysMap.
- 	// Only user-mode Linux (UML) rejects these requests.
--	if sys.PtrSize == 8 && uint64(n) > 1<<32 {
--		p, err := mmap_fixed(v, 64<<10, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, mmapFD, 0)
--		if p != v || err != 0 {
--			if err == 0 {
--				munmap(p, 64<<10)
--			}
--			return nil
--		}
--		munmap(p, 64<<10)
--		*reserved = false
--		return v
--	}
--
- 	p, err := mmap(v, n, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, mmapFD, 0)
- 	if err != 0 {
- 		return nil
-@@ -277,6 +288,10 @@
- 		}
- 		return
- 	}
-+	// genode: we already alloced memory instead of reservation, just use it
-+	if GOOS == "inno" {
-+	 	return
-+	}
- 
- 	if GOOS == "aix" {
- 		// AIX does not allow mapping a range that is already mapped.
 diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/netpoll.go inno/libgo/go/runtime/netpoll.go
 --- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/netpoll.go	2017-09-14 20:11:35.000000000 +0300
 +++ inno/libgo/go/runtime/netpoll.go	2020-06-23 01:18:02.000000000 +0300
@@ -1301,45 +1235,10 @@ diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libg
 +	//fd := open(&urandom_dev[0], 0 /* O_RDONLY */, 0)
 +	//n := read(fd, unsafe.Pointer(&r[0]), int32(len(r)))
 +	//closefd(fd)
-+	// FIXME genode
++	// FIXME there is no /dev/urandom in genode
 +	n := uintptr(unsafe.Pointer(&r[0]))
  	extendRandom(r, int(n))
  }
-diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/print.go inno/libgo/go/runtime/print.go
---- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/print.go	2018-01-09 04:23:08.000000000 +0300
-+++ inno/libgo/go/runtime/print.go	2020-06-23 01:18:02.000000000 +0300
-@@ -85,7 +85,14 @@
- // For both these reasons, let a thread acquire the printlock 'recursively'.
- 
- func printlock() {
--	mp := getg().m
-+	g := getg()
-+	if g == nil {
-+		g1 := getg()
-+		if g1 == nil {
-+		}
-+		return
-+	}
-+	mp := g.m
- 	mp.locks++ // do not reschedule between printlock++ and lock(&debuglock).
- 	mp.printlock++
- 	if mp.printlock == 1 {
-@@ -95,7 +102,14 @@
- }
- 
- func printunlock() {
--	mp := getg().m
-+	g := getg()
-+	if g == nil {
-+		g1 := getg()
-+		if g1 == nil {
-+		}
-+		return
-+	}
-+	mp := g.m
- 	mp.printlock--
- 	if mp.printlock == 0 {
- 		unlock(&debuglock)
 diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/signal_gccgo.go inno/libgo/go/runtime/signal_gccgo.go
 --- contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libgo/go/runtime/signal_gccgo.go	2018-01-10 08:15:52.000000000 +0300
 +++ inno/libgo/go/runtime/signal_gccgo.go	2020-06-23 01:18:02.000000000 +0300
@@ -1470,7 +1369,7 @@ diff -ru contrib/libgo-10be92754f6dbbd51b390bfdc9250f2b4370d9cb/src/lib/gcc/libg
 -			goto childerror
 -		}
 -	}
-+	// FIXME
++	// FIXME: no ptrace in genode
 +	//if sys.Ptrace {
 +	//	err1 = raw_ptrace(_PTRACE_TRACEME, 0, nil, nil)
 +	//	if err1 != 0 {
