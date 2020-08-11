@@ -401,9 +401,18 @@ __SYS_(void *, mmap, (void *addr, ::size_t length,
 {
 
 	/* handle requests for anonymous memory */
-	if (!addr && libc_fd == -1) {
+	if (libc_fd == -1)
+	{
 		bool const executable = prot & PROT_EXEC;
-		void *start = mem_alloc(executable)->alloc(length, PAGE_SHIFT);
+		void *start;
+		if (!addr)
+		{
+			/* no desired address */
+			start = mem_alloc(executable)->alloc(length, PAGE_SHIFT);
+		} else {
+			/* with desired address, should be PAGE_SHIFT aligned */
+			start = mem_alloc(executable)->alloc_at(addr, length);
+		}
 		if (!start) {
 			errno = ENOMEM;
 			return MAP_FAILED;

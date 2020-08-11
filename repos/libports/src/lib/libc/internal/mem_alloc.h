@@ -29,6 +29,7 @@ namespace Libc {
 	struct Mem_alloc
 	{
 		virtual void *alloc(size_t size, size_t align_log2) = 0;
+		virtual void *alloc_at(void *ptr, size_t size) = 0;
 		virtual void free(void *ptr) = 0;
 		virtual size_t size_at(void const *ptr) const = 0;
 	};
@@ -88,10 +89,24 @@ namespace Libc {
 					~Dataspace_pool();
 
 					/**
+					 * Expand dataspace by specified size and at local address
+					 *
+					 * \param size      number of bytes to add to the dataspace pool
+					 * \param ptr       desired address
+					 * \param alloc     allocator to expand. This allocator is also
+					 *                  used for meta data allocation (only after
+					 *                  being successfully expanded).
+					 * \throw           Region_map::Invalid_dataspace,
+					 *                  Region_map::Region_conflict
+					 * \return          0 on success or negative error code
+					 */
+					int expand_at(size_t size, void * ptr, Range_allocator *alloc);
+
+					/**
 					 * Expand dataspace by specified size
 					 *
 					 * \param size      number of bytes to add to the dataspace pool
-					 * \param md_alloc  allocator to expand. This allocator is also
+					 * \param alloc     allocator to expand. This allocator is also
 					 *                  used for meta data allocation (only after
 					 *                  being successfully expanded).
 					 * \throw           Region_map::Invalid_dataspace,
@@ -130,6 +145,7 @@ namespace Libc {
 			{ }
 
 			void *alloc(size_t size, size_t align_log2);
+			void *alloc_at(void *ptr, size_t size);
 			void free(void *ptr);
 			size_t size_at(void const *ptr) const;
 	};

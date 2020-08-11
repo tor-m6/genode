@@ -83,6 +83,94 @@ int Libc::Mem_alloc_impl::Dataspace_pool::expand(size_t size, Range_allocator *a
 	return 0;
 }
 
+int Libc::Mem_alloc_impl::Dataspace_pool::expand_at(size_t size, void * ptr, Range_allocator *alloc)
+{
+	Ram_dataspace_capability new_ds_cap;
+	void *local_addr, *ds_addr = 0;
+
+	/* make new ram dataspace available at our local address space */
+	try {
+		new_ds_cap = _ram->alloc(size);
+
+		local_addr = _region_map->attach_at(new_ds_cap, addr_t(ptr));
+	}
+	catch (Out_of_ram) {
+		return -2;
+	}
+	catch (Out_of_caps) {
+		return -4;
+	}
+	catch (Region_map::Region_conflict) {
+		_ram->free(new_ds_cap);
+		return -3;
+	}
+
+	/* add new local address range to our local allocator */
+	alloc->add_range((addr_t)local_addr, size);
+
+	/* now that we have new backing store, allocate Dataspace structure */
+	if (alloc->alloc_aligned(sizeof(Dataspace), &ds_addr, 2).error()) {
+		warning("libc: could not allocate meta data - this should never happen");
+		return -1;
+	}
+
+	/* add dataspace information to list of dataspaces */
+	Dataspace *ds  = new (ds_addr) Dataspace(new_ds_cap, local_addr);
+	insert(ds);
+
+	return 0;
+}
+
+void *Libc::Mem_alloc_impl::alloc_at(void *out_addr, size_t size)
+{
+	/* serialize access of heap functions */
+	Mutex::Guard guard(_mutex);
+
+	/* try allocation at our local allocator */
+	if (_alloc.alloc_addr(size, addr_t(out_addr)).ok())
+		return out_addr;
+
+	/*
+	 * Calculate block size of needed backing store. The block must hold the
+	 * requested 'size' with the 4K page alignment, a new Dataspace structure
+	 * and space for AVL-node slab blocks if the allocation above failed.
+	 * Finally, we align the size to a 4K page.
+	 */
+	size_t request_size = size + 4096 +
+		Allocator_avl::slab_block_size() + sizeof(Dataspace);
+
+	if (request_size < _chunk_size*sizeof(umword_t)) {
+		request_size = _chunk_size*sizeof(umword_t);
+
+		/*
+		 * Exponentially increase chunk size with each allocated chunk until
+		 * we hit 'MAX_CHUNK_SIZE'.
+		 */
+		_chunk_size = min(2*_chunk_size, (size_t)MAX_CHUNK_SIZE);
+	}
+
+	// allocate in 2 chunks - one as gap anywhere else
+	if (_ds_pool.expand(align_addr(request_size-size, 12), &_alloc) < 0) {
+		warning("libc: could not expand dataspace pool");
+		return 0;
+	}
+
+	// allocate gap in our memory space, somewhere, from page-start
+	// TODO: can hit our desired range, need to check and move outside
+	void *out_addr_gap = 0;
+	_alloc.alloc_aligned(align_addr(request_size-size, 12), &out_addr_gap, 12);
+
+
+	// allocate in 2 chunks - second exacly as requested (rounded to page)
+	if (_ds_pool.expand_at(align_addr(size, 12), out_addr, &_alloc) < 0) {
+		warning("libc: could not expand dataspace pool");
+		return 0;
+	}
+
+	/* allocate originally requested block */
+	return _alloc.alloc_addr(size, addr_t(out_addr)).ok() ? out_addr : 0;
+
+}
 
 void *Libc::Mem_alloc_impl::alloc(size_t size, size_t align_log2)
 {
