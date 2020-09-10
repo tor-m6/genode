@@ -535,7 +535,7 @@ Libc::Kernel::Kernel(Genode::Env &env, Genode::Allocator &heap)
 	init_plugin(*this);
 	init_sleep(*this);
 	init_vfs_plugin(*this, _env.rm());
-	init_file_operations(*this);
+	init_file_operations(*this, heap);
 	init_time(*this, *this);
 	init_select(*this, *this, *this, _signal);
 	init_socket_fs(*this);
