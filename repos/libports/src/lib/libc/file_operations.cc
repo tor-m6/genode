@@ -65,11 +65,22 @@ Libc::Mmap_registry *Libc::mmap_registry()
 
 static Cwd *_cwd_ptr;
 
-void Libc::init_file_operations(Cwd &cwd)
+static Genode::Allocator *_alloc_ptr;
+
+void Libc::init_file_operations(Cwd &cwd, Genode::Allocator &alloc)
 {
 	_cwd_ptr = &cwd;
+	_alloc_ptr = &alloc;
 }
 
+Genode::Allocator *kernel_allocator()
+{
+	if (_alloc_ptr)
+		return _alloc_ptr;
+
+	error("missing call of 'init_file_operations'");
+	return nullptr;
+}
 
 /***************
  ** Utilities **
@@ -408,34 +419,62 @@ extern "C" int mkdir(const char *path, mode_t mode)
 	}
 }
 
-
-__SYS_(void *, mmap, (void *addr, ::size_t length,
-                      int prot, int flags,
-                      int libc_fd, ::off_t offset),
+namespace Genode
 {
-	/* handle requests for anonymous memory */
-	if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON)) {
+	char *pd_reserve_memory(size_t bytes, void *requested_addr,
+							size_t alignment_hint);
+	bool pd_unmap_memory(void *addr, size_t bytes);
+	bool pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr);
+}; // namespace Genode
 
-		if (flags & MAP_FIXED) {
-			Genode::error("mmap for fixed predefined address not supported yet");
-			errno = EINVAL;
-			return MAP_FAILED;
-		}
+#if 0
+__SYS_(void *, mmap, (void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset),
+#else
+#define __SYS_(ret_type, name, args, body)                                      \
+	extern "C"                                                                  \
+	{                                                                           \
+		ret_type __sys_##name args body                                         \
+			ret_type __libc_##name args __attribute__((alias("__sys_" #name))); \
+		ret_type _##name args __attribute__((alias("__sys_" #name)));           \
+		ret_type name args __attribute__((alias("__sys_" #name)));              \
+	}
 
-		bool const executable = prot & PROT_EXEC;
-		void *start = mem_alloc(executable)->alloc(length, PAGE_SHIFT);
-		if (!start) {
+void * __sys_mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset)
+#endif
+{
+	if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON))
+	{
+		/* handle requests for anonymous memory */
+
+		/* FIXME do not allow overlap with other areas as in original mmap() - just fail */
+		/* desired address given as addr (mandatory if flags has MAP_FIXED) */
+		void *start = Genode::pd_reserve_memory(length, addr, 0);
+		if (!start || ((flags & MAP_FIXED) && (start != addr)))
+		{
 			errno = ENOMEM;
 			return MAP_FAILED;
 		}
-		::memset(start, 0, align_addr(length, PAGE_SHIFT));
 		mmap_registry()->insert(start, length, 0);
+
+		if (prot == PROT_NONE)
+		{
+			/* process request for memory range reservation (no access, no commit) */
+			return start;
+		}
+
+		/* 
+		* desired address returned; commit virtual range
+		*/
+		Genode::pd_commit_memory(start, length, prot & PROT_EXEC, addr != 0);
+		/* zero commited ram */
+		::memset(start, 0, align_addr(length, PAGE_SHIFT));
 		return start;
 	}
 
 	/* lookup plugin responsible for file descriptor */
 	File_descriptor *fd = libc_fd_to_fd(libc_fd, "mmap");
-	if (!fd || !fd->plugin || !fd->plugin->supports_mmap()) {
+	if (!fd || !fd->plugin || !fd->plugin->supports_mmap())
+	{
 		warning("mmap not supported for file descriptor ", libc_fd);
 		errno = EBADF;
 		return MAP_FAILED;
@@ -444,8 +483,14 @@ __SYS_(void *, mmap, (void *addr, ::size_t length,
 	void *start = fd->plugin->mmap(addr, length, prot, flags, fd, offset);
 	mmap_registry()->insert(start, length, fd->plugin);
 	return start;
-})
-
+#if 0
+	   })
+#else
+}
+void *__libc_mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
+void *      _mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
+void *       mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
+#endif
 
 extern "C" int munmap(void *start, ::size_t length)
 {
@@ -466,10 +511,7 @@ extern "C" int munmap(void *start, ::size_t length)
 	if (plugin)
 		ret = plugin->munmap(start, length);
 	else {
-		bool const executable = true;
-		/* XXX another metadata handling required to track anonymous memory */
-		mem_alloc(!executable)->free(start);
-		mem_alloc(executable)->free(start);
+		Genode::pd_unmap_memory(start,length);
 	}
 
 	mmap_registry()->remove(start);

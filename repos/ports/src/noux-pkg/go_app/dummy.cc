@@ -85,43 +85,14 @@ void stacktraceandabort( void )
 	//exit(0);
 }
 #endif
-//#include <base/heap.h>
-// #include <platform.h>
-// #include <core_env.h>
-#include <base/component.h>
-
-extern int main (int argc, const char* argv[]);
-
-#if 0
-void Component::construct(Genode::Env &env)
-{
-//	Genode::Heap heap(env.ram(), env.rm());
-//	_verbose = false;
-	// static Core_env _env;
-	env.exec_static_constructors();
-
-	Genode::log("Goalng  Component::construct");
-
-	// Libc::with_libc([&r] () { r = main(c, &myname); });
-}
-#endif
-#include <libc/component.h>
-void Libc::Component::construct(Libc::Env &env)
-{
-	static int c = 1;
-	static char const *myname = "GolangApp";
-	int r = 0;
-	Libc::with_libc([&r]() { r = main(c, &myname); });
-	r = main(c, &myname);
-	env.parent().exit(r);
-}
-
 
 extern "C"
 void Log(const char * b)
 {
 	Genode::log("Log: ",b);
 }
+
+#include <util/string.h>
 
 // print to log from go using go string
 extern "C"
