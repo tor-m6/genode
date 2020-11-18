@@ -1,3 +1,5 @@
+REQUIRES += x86_64
+
 CBE_DIR = $(call select_from_ports,cbe)
 
 LIBS += spark sha256_4k
