@@ -544,9 +544,12 @@ bool Genode::pd_commit_memory(void *addr, size_t size, bool exec, bool with_requ
 void *Genode::pd_get_base_address(void *addr, bool &nanon)
 {
     return (void *)vm_reg->get_base_address((addr_t)addr, nanon);
+}
 
 /******************
  ** Startup code **
+ ******************/
+
 extern char **genode_argv;
 extern int genode_argc;
 extern char **genode_envp;
