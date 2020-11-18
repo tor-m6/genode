@@ -60,10 +60,8 @@ int sigaltstack(const stack_t *ss, stack_t *oss)
 }
 
 // end extern "C"
-void stacktraceandabort( void );
 void __outgo_genode_log();
 }
-//extern "C" bool _verbose;
 
 // to produce call stack and halt
 #include <spec/x86_64/os/backtrace.h>
@@ -74,54 +72,13 @@ extern "C" int raise(int sig)
 	return 0;
 }
 
-#if 1
-#include <stdlib.h>
-#include <base/log.h>
-void stacktraceandabort( void )
-{
-	Genode::log("--- stacktraceandabort ---");
-	//Genode::backtrace();
-	//abort();
-	//exit(0);
-}
-#endif
-//#include <base/heap.h>
-// #include <platform.h>
-// #include <core_env.h>
-#include <base/component.h>
-
-extern int main (int argc, const char* argv[]);
-
-#if 0
-void Component::construct(Genode::Env &env)
-{
-//	Genode::Heap heap(env.ram(), env.rm());
-//	_verbose = false;
-	// static Core_env _env;
-	env.exec_static_constructors();
-
-	Genode::log("Goalng  Component::construct");
-
-	// Libc::with_libc([&r] () { r = main(c, &myname); });
-}
-#endif
-#include <libc/component.h>
-void Libc::Component::construct(Libc::Env &env)
-{
-	static int c = 1;
-	static char const *myname = "GolangApp";
-	int r = 0;
-	Libc::with_libc([&r]() { r = main(c, &myname); });
-	r = main(c, &myname);
-	env.parent().exit(r);
-}
-
-
 extern "C"
 void Log(const char * b)
 {
 	Genode::log("Log: ",b);
 }
+
+#include <util/string.h>
 
 // print to log from go using go string
 extern "C"
@@ -185,18 +142,14 @@ extern "C"
 void * alloc_secondary_stack( size_t stack_size )
 {
 	Genode::Thread * myself = Genode::Thread::myself();
-	//if (stack_size> 1024*1024-4096*3) stack_size = 1024*1024-4096*3;
 	if (!myself)
 		return NULL;
 	void  * ret =  myself->alloc_secondary_stack("goroutine", stack_size);
 	addr_t base = addr_to_base(ret);
 
 	char * c = reinterpret_cast<char *>(ret);
-	//log("alloc_secondary_stack ", Hex(stack_size), " m ", myself, " r ", ret, " b ", Hex(base));
 	for( size_t i= 0; i >= -stack_size; i-- )
 		c[i] = 0x0;
-	//memset(ret, 0, stack_size);
-	//log(" firstb  ", Hex((addr_t)c-stack_size)," last  ", Hex((addr_t)c));
 
 	return (void *)base;
 }
@@ -212,7 +165,6 @@ extern "C"
 void free_secondary_stack( void * stack )
 {
 	Genode::Thread * myself = Genode::Thread::myself();
-	//log("free_secondary_stack ", stack, " m ", myself, " bs ", base_to_stack((addr_t)stack));
 	if (!myself)
 		return ;
 	myself->free_secondary_stack(base_to_stack((addr_t)stack));
