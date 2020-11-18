@@ -2,7 +2,7 @@
  * \brief  Basic test for manually managing a sub RM session
  *         based on Genode jdk os_genode.cpp code
  * \author Alexander Tormasov
- * \date   2020-09-10
+ * \date   2020-11-17
  */
 
 #include <base/heap.h>
@@ -38,6 +38,8 @@ extern "C"
 
 #include <spec/x86_64/os/backtrace.h>
 
+static const int throw_base = -100;
+
 extern "C" void backtrace()
 {
     Genode::backtrace();
@@ -56,7 +58,20 @@ namespace Genode
 
 /* 
  * intended for mmap with ANON memory
- * limitations: only full region map/unmap (no partial)
+ * reserve: for range we allocate local virtual memory (lvm) from
+ *   local allocator to preserve it from usage later by lvm allocator
+ *   any access to the range will lead to fault (equal to PROT_NONE)
+ * commit: we allocate phys mem as ds, and map it "below" range with 
+ *   appropriate access type (exec or read/write)
+ * release: could be "full" area release (symmetric to reserve and commit),
+ *   or could be in the middle of ds commited
+ *   in such case we will not free pysical memory from ds because we can't
+ *   make partial free, but just unmap memory from lvm (and force fault in 
+ *   case of access). So, any such unmap will make a hole in allocated ds
+ *   We do not free/update local allocator if we make hole - because it is
+ *   not used for handling of mapped/unmapped areas, this is solely
+ *   responsibility of user created anon mapping
+ *   TODO: track unused memory after partial release from ds to reuse it later
  */
 class Genode::Vm_region_map
 {
@@ -112,7 +127,7 @@ public:
             Genode::error(
                 "Vm_region_map::alloc error: ",
                 int(r.value), " ", Hex_range<addr_t>(addr, size));
-            throw -1;
+            throw -1 + throw_base;
         }
         return addr;
     }
@@ -125,7 +140,7 @@ public:
             Genode::error(
                 "Vm_region_map::alloc_at error: ",
                 int(r.value), " ", Hex_range<addr_t>(addr, size));
-            throw -1;
+            throw -2 + throw_base;
         }
         return addr;
     }
@@ -154,16 +169,44 @@ public:
 class Genode::Vm_area
 {
 private:
-    struct Vm_area_ds
+    struct Vm_range
     {
         addr_t base;
         size_t size;
+
+        bool get_crossing_range(const addr_t q_base, size_t q_size,
+                                addr_t &crossing_base, size_t &crossing_size)
+        {
+            /* if inside modify crossing_base/crossing_size and return true */
+            /* known bug - not work for q_size == 0 */
+            if ((q_base + (q_size ? q_size : 1) > base) &&
+                (base + size > q_base))
+            {
+                crossing_base = max(q_base, base);
+                crossing_size = min(q_base + q_size, base + size) - crossing_base;
+                return true;
+            }
+            return false;
+        }
+
+        Vm_range(addr_t base, size_t size)
+            : base(base), size(size) {}
+
+        virtual ~Vm_range()
+        {
+        };
+    };
+
+    struct Vm_area_ds : Vm_range
+    {
         Ram_dataspace_capability ds;
 
         Vm_area_ds(addr_t base, size_t size, Ram_dataspace_capability ds)
-            : base(base), size(size), ds(ds) {}
+            : Vm_range(base, size), ds(ds) {}
 
-        virtual ~Vm_area_ds(){ };
+        virtual ~Vm_area_ds()
+        {
+        };
     };
 
         typedef Registered<Vm_area_ds> Vm_handle;
@@ -174,6 +217,9 @@ private:
         Registry<Vm_handle> _ds;
 
     public:
+        typedef Registered<Vm_range> Vm_ranges_handle;
+        Registry<Vm_ranges_handle> mapped;
+
         Vm_area(Env &env, Heap &heap, addr_t base, size_t size)
             : _env(env), _kheap(heap), _rm(env, heap, size, base)
         {
@@ -196,7 +242,9 @@ private:
         addr_t alloc_at(size_t size, addr_t local_addr) { return _rm.alloc_at(size, local_addr); }
 
         void free(addr_t vaddr) { _rm.free(vaddr); }
-        
+
+        size_t size_at(void const *addr) const { return _rm.size_at(addr); }
+
         bool commit(addr_t base, size_t size, bool executable)
         {
             if (!inside(base, size))
@@ -213,31 +261,48 @@ private:
             }
             catch (Region_map::Region_conflict)
             {
-                Genode::error("Region_conflict in _rm.attach ",
+                Genode::warning("Region_conflict in _rm.attach ",
                     Hex_range<addr_t>(base, size));
                 _env.ram().free(ds);
                 return false;
             }
+#if 0
+            // not sure that we need to catch other exceptions
             catch (...)
             {
                 Genode::error(
-                    "Vm_area::commit: catch _env.ram().free(ds)");
+                    "Vm_area::commit: exception");
                 _env.ram().free(ds);
                 return false;
             }
-
+#endif
             new (_kheap) Vm_handle(_ds, base, size, ds);
+
+            /* registry of used adresses in the alloced ranges for list
+             * of regions backed by phys mem
+             * we have on the same Vm_area 2 lists of ranges
+             * first for ds in _ds and second in mapped for attached backend
+             * any range from mapped should be backened by any from _ds
+             * but any range in _ds could have a holes inside (not mapped)
+             * initially we map Vm_handle to Vm_ranges_handle 1:1, but munmap
+             * can split them
+             */
+            new (_kheap) Vm_ranges_handle(mapped, base, size);
 
             return true;
         }
 
         virtual ~Vm_area()
         {
+            mapped.for_each([&](Vm_ranges_handle &vr) {
+                /* detach from local virtual memory */
+                _rm.detach(vr.base);
+                /* remove structure/metadata from local heap allocator */
+                destroy(_kheap, &vr);
+            });
             _ds.for_each([&](Vm_handle &vm) {
                 /* remove from local allocator */
                 _rm.free(vm.base);
-                /* detach from local virtual memory */
-                _rm.detach(vm.base);
                 /* free backend memory/dataspace (physical) */
                 _env.ram().free(vm.ds);
                 /* remove structure/metadata from local heap allocator */
@@ -264,7 +329,7 @@ public :
         /* register dedicated Vm_area for first allocator range, used without requested_addr */
         _pvma = new (&_kheap) Vm_area_handle(_registry, _env, _kheap, requested_address, size);
 
-        /* add mapped range to local allocator to allow its use in local allocation */
+        /* add mapped range to local allocator to allow its use in allocation */
         _pvma->add_range(_pvma->base(), size);
     }
 
@@ -279,7 +344,7 @@ public :
     {
         if (!base)
         {
-            /* from pre-allocated _pvma area; give new base address */
+            /* from pre-allocated and commited _pvma area, it is already inside add_range() */
             base = _pvma->alloc(size, align);
         } else
         {
@@ -287,11 +352,13 @@ public :
             Vm_area *vm = new (&_kheap) Vm_area_handle(_registry, _env, _kheap, base, size);
 
             /* add range for requested addresses */
-            if (vm->add_range(base, size))
+            int r = vm->add_range(base, size);
+            if (r)
             {
-                error(__func__, " can't add_range; align ", Hex(align), " ", Hex_range<addr_t>(base, size));
-                throw -5;
+                error(__func__, " cant reserve, err: ", r, " align ", Hex(align), " ", Hex_range<addr_t>(base, size));
+                throw r + throw_base;
             }
+            /* add it as a whole to preserve from local allocator usage */
             vm->alloc_at(size, base);
         }
 
@@ -311,7 +378,26 @@ public :
         return success;
     }
 
-    bool release(addr_t base, size_t size)
+    addr_t get_base_address(addr_t base, bool &nanon)
+    {
+        bool success = false;
+        addr_t ret = 0;
+
+        _registry.for_each([&](Vm_area_handle &vm) {
+            if (success)
+                return;
+            if (vm.inside(base, 1))
+            {
+                ret = vm.base();
+                nanon = (ret != _pvma->base());
+                return;
+            }
+        });
+
+        return ret;
+    }
+
+    bool release(addr_t base, size_t size, bool &area_used)
     {
         bool success = false;
 
@@ -321,40 +407,102 @@ public :
 
             if (base != vm.base() || size != vm.size())
             {
-                error("sub region release attempt", " addr: ", Hex(base), " vm addr: ", Hex(vm.base()),
-                      " size: ", Hex(size), " vm size: ", Hex(vm.size()));
-                throw -6;
+                /* do split vm */
+                bool used = false;
+                bool need_new_chunk = false;
+                addr_t newaddr, oldaddr;
+                size_t newsize, oldsize;
+                /* search for overlapping region in current Vm_area */
+                vm.mapped.for_each([&](Vm_area::Vm_ranges_handle &vr) {
+                    if (vr.get_crossing_range(base, size, newaddr, newsize))
+                    {
+                        /* found crossing range of input with our current vr
+                         * ranges:
+                         *   vr.base, vr.size - how chunk was allocated, we assume to be inside
+                         *  [vr.base,newaddr): used (can be empty)
+                         *  [newaddr,newaddr+newsize): to became free
+                         *  [newaddr+newsize,vr.base+vr.size): used (can be empty)
+                         */
+                        bool used_vr = false;
+                        oldaddr = vr.base;
+                        oldsize = vr.size;
+
+                        /* reuse first chunk if need */
+                        if (oldaddr != newaddr)
+                        {
+                            vr.size = newaddr - oldaddr;
+                            used_vr = true;
+                        }
+
+                        /* create second chunk if need */
+                        if (newaddr + newsize != oldaddr + oldsize)
+                        {
+                            if (used_vr)
+                            {
+                                /* can't create and add new object inside for_each()
+                                 * due to recursive mutex call (which is not allowed) */
+                                need_new_chunk = true;
+                                /* this is not empty vr, and no iteration required
+                                 * because we are in the middle of the current vr, it cant cross other */
+                                return;
+                            }
+                            else
+                            {
+                                /* reuse original vr */
+                                vr.base = newaddr + newsize;
+                                vr.size = oldaddr + oldsize - newaddr - newsize;
+                                used_vr = true;
+                            }
+                        }
+
+                        /* if not used vr - free it */
+                        if (!used_vr)
+                        {
+                            destroy(_kheap, &vr);
+                        }
+                        else
+                            used = true;
+                    }
+                    else
+                        used = true;
+                });
+
+                if (need_new_chunk)
+                {
+                    new (_kheap) Vm_area::Vm_ranges_handle(vm.mapped, newaddr + newsize,
+                                                           oldaddr + oldsize - newaddr - newsize);
+                }
+
+                area_used = used;
+                success = true;
+                return;
             }
 
+            /* whole area free */
             vm.free(vm.base());
             /* do not destroy main area for requested_address==0 allocation */
             if (_pvma != &vm)
                 destroy(_kheap, &vm);
             success = true;
+            area_used = false;
         });
 
         if (!success)
-            error(__func__, " failed at ", Hex_range<addr_t>(base, size));
+            error(__func__, " Vm_area_registry::release failed at ", Hex_range<addr_t>(base, size));
 
         return success;
     }
 };
 
-
 static Genode::Constructible<Genode::Vm_area_registry> vm_reg;
 
 namespace Genode
 {
-    /*
-     *_ZN6Genode17pd_release_memoryEPvm T
-     _ZN6Genode18pd_uncommit_memoryEPvm T
-     _ZN6Genode24pd_commit_memory_or_exitEPvmbbPKc T
-     _ZN6Genode28pd_attempt_reserve_memory_atEmPv T
-     */
     char *pd_reserve_memory(size_t bytes, void *requested_addr,
                             size_t alignment_hint);
-    bool pd_unmap_memory(void *addr, size_t bytes);
+    bool pd_unmap_memory(void *addr, size_t bytes, bool &area_used);
     bool pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr);
+    void *pd_get_base_address(void *addr, bool &anon);
 }; // namespace Genode
 
 char *Genode::pd_reserve_memory(size_t bytes, void *requested_addr,
@@ -376,9 +524,9 @@ char *Genode::pd_reserve_memory(size_t bytes, void *requested_addr,
     return nullptr;
 }
 
-bool Genode::pd_unmap_memory(void *addr, size_t bytes)
+bool Genode::pd_unmap_memory(void *addr, size_t bytes, bool &area_used)
 {
-    return vm_reg->release((Genode::addr_t)addr, bytes);
+    return vm_reg->release((Genode::addr_t)addr, bytes, area_used);
 }
 
 bool Genode::pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr)
@@ -387,34 +535,39 @@ bool Genode::pd_commit_memory(void *addr, size_t size, bool exec, bool with_requ
     if (!addr)
     {
         Genode::error(__PRETTY_FUNCTION__, "  addr == 0");
-        throw -7;
+        throw -7 + throw_base;
     }
 
     return vm_reg->commit((Genode::addr_t)addr, size, exec);
+}
+
+void *Genode::pd_get_base_address(void *addr, bool &nanon)
+{
+    return (void *)vm_reg->get_base_address((addr_t)addr, nanon);
 }
 
 /******************
  ** Startup code **
  ******************/
 
-    extern char **genode_argv;
-    extern int genode_argc;
-    extern char **genode_envp;
+extern char **genode_argv;
+extern int genode_argc;
+extern char **genode_envp;
 
-    /* initial environment for the FreeBSD libc implementation */
-    extern char **environ;
+/* initial environment for the FreeBSD libc implementation */
+extern char **environ;
 
-    /* provided by the application */
-    extern "C" int main(int argc, char **argv, char **envp);
+/* provided by the application */
+extern "C" int main(int argc, char **argv, char **envp);
 
-    static void construct_component(Libc::Env &env)
-    {
+static void construct_component(Libc::Env &env)
+{
 
-        populate_args_and_env(env, genode_argc, genode_argv, genode_envp);
+    populate_args_and_env(env, genode_argc, genode_argv, genode_envp);
 
-        environ = genode_envp;
+    environ = genode_envp;
 
-        exit(main(genode_argc, genode_argv, genode_envp));
+    exit(main(genode_argc, genode_argv, genode_envp));
 }
 
 extern Genode::Allocator *kernel_allocator();
@@ -423,14 +576,14 @@ void Libc::Component::construct(Libc::Env &env)
 {
     Genode::Attached_rom_dataspace config(env, "config");
 
-    /* 15 Mb for allocator without predefined address */
-    size_t const local_heap_default_size =
-        config.xml().attribute_value("local_heap_default_size", (size_t)(15ul * 1024 * 1024));
+    /* by default 15 Mb for allocator without predefined address */
+    size_t const local_area_default_size =
+        config.xml().attribute_value("local_area_default_size", (size_t)(15ul * 1024 * 1024));
 
     /* get Kernel::_heap from Libc */
     /* and use it as metadata data storage with pre-allocaion */
     vm_reg.construct(env, reinterpret_cast<Genode::Heap &>(*kernel_allocator()), 
-        local_heap_default_size);
+        local_area_default_size);
 
     Libc::with_libc([&]() { construct_component(env); });
 }

@@ -423,24 +423,12 @@ namespace Genode
 {
 	char *pd_reserve_memory(size_t bytes, void *requested_addr,
 							size_t alignment_hint);
-	bool pd_unmap_memory(void *addr, size_t bytes);
+	bool pd_unmap_memory(void *addr, size_t bytes, bool &area_used);
 	bool pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr);
+	void *pd_get_base_address(void *addr, bool &anon);
 }; // namespace Genode
 
-#if 0
 __SYS_(void *, mmap, (void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset),
-#else
-#define __SYS_(ret_type, name, args, body)                                      \
-	extern "C"                                                                  \
-	{                                                                           \
-		ret_type __sys_##name args body                                         \
-			ret_type __libc_##name args __attribute__((alias("__sys_" #name))); \
-		ret_type _##name args __attribute__((alias("__sys_" #name)));           \
-		ret_type name args __attribute__((alias("__sys_" #name)));              \
-	}
-
-void * __sys_mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset)
-#endif
 {
 	if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON))
 	{
@@ -483,18 +471,17 @@ void * __sys_mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd,
 	void *start = fd->plugin->mmap(addr, length, prot, flags, fd, offset);
 	mmap_registry()->insert(start, length, fd->plugin);
 	return start;
-#if 0
 	   })
-#else
-}
-void *__libc_mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
-void *      _mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
-void *       mmap(void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset) __attribute__((alias("__sys_" "mmap")));
-#endif
 
-extern "C" int munmap(void *start, ::size_t length)
+extern "C" int munmap(void *base, ::size_t length)
 {
-	if (!mmap_registry()->registered(start)) {
+	bool nanon;
+	void *start = Genode::pd_get_base_address(base, nanon);
+	if (!start)
+		start = base;
+
+	if (nanon && !mmap_registry()->registered(start))
+	{
 		warning("munmap: could not lookup plugin for address ", start);
 		errno = EINVAL;
 		return -1;
@@ -505,16 +492,18 @@ extern "C" int munmap(void *start, ::size_t length)
 	 *
 	 * If the pointer is NULL, 'start' refers to an anonymous mmap.
 	 */
-	Plugin *plugin = mmap_registry()->lookup_plugin_by_addr(start);
+	Plugin *plugin = nanon? mmap_registry()->lookup_plugin_by_addr(start) : 0;
 
 	int ret = 0;
+	bool area_used = false;
 	if (plugin)
 		ret = plugin->munmap(start, length);
 	else {
-		Genode::pd_unmap_memory(start,length);
+		Genode::pd_unmap_memory(base, length, area_used);
 	}
 
-	mmap_registry()->remove(start);
+	if (nanon && !area_used)
+		mmap_registry()->remove(start);
 	return ret;
 }
 
