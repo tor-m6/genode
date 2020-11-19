@@ -206,8 +206,8 @@ append  config { </wifi_config>
 	</start> }
 } else {
 	append config {
-	<start name="nic_drv" caps="1000">
-		<resource name="RAM" quantum="32M" constrain_phys="yes"/>
+	<start name="nic_drv" caps="1000" managing_system="yes">
+		<resource name="RAM" quantum="32M"/>
 		<binary name="init"/>
 		<route>
 			<service name="ROM" label="config"> <parent label="drivers.config"/> </service>
@@ -316,16 +316,8 @@ build_boot_image { netserver }
 #
 
 # qemu config
-append qemu_args "  -nographic "
-
-proc qemu_nic_model {} {
-	if [have_spec x86]     { return e1000 }
-	if [have_spec lan9118] { return lan9118 }
-	return nic_model_missing
-}
-
-append qemu_args " -netdev user,id=net0,hostfwd=tcp::12865-:12865,hostfwd=tcp::49153-:49153 "
-append qemu_args " -net nic,model=[qemu_nic_model],netdev=net0 "
+append qemu_args     "  -nographic "
+append_qemu_nic_args "hostfwd=tcp::12865-:12865,hostfwd=tcp::49153-:49153"
 
 set ip_match_string ""
 set force_ports ""

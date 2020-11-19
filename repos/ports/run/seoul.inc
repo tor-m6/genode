@@ -62,7 +62,7 @@ proc platform_drv_priority {} { return { priority="-1"} }
 
 set build_components {
 	drivers/rtc
-	drivers/input
+	drivers/ps2
 	app/seoul
 }
 
@@ -212,7 +212,7 @@ append config {
 append_if [expr !$use_usb] config {
 	<start name="ps2_drv" priority="-1">
 		<resource name="RAM" quantum="3M"/>
-		<provides><service name="Input"/></provides>
+		<config/>
 		<route> <any-service><parent/> <any-child/> </any-service> </route>
 	</start> }
 
@@ -399,7 +399,6 @@ append config {
 append_if $use_usb config {
 	<start name="usb_drv" priority="-1" caps="120">
 		<resource name="RAM" quantum="12M"/>
-		<provides><service name="Input"/></provides>
 		<config uhci="yes" ehci="yes" xhci="yes">
 			<hid/>
 		</config>
@@ -408,8 +407,11 @@ append_if $use_usb config {
 append config {
 	<start name="nitpicker" priority="-1" caps="120">
 		<resource name="RAM" quantum="8M"/>
-		<config request_framebuffer="no">
-			<capture/>
+		<provides>
+			<service name="Gui"/> <service name="Capture"/> <service name="Event"/>
+		</provides>
+		<config>
+			<capture/> <event/>
 			<report focus="yes" />
 			<domain name="pointer" layer="1" content="client" label="no" origin="pointer" />
 			<domain name="panel"   layer="2" content="client" label="no" focus="none" />
@@ -435,7 +437,6 @@ append config {
 			<service name="Report"> <child name="report_rom"/></service>
 			<any-service><parent/><any-child/></any-service>
 		</route>
-		<provides> <service name="Gui"/> <service name="Capture"/> </provides>
 	</start>
 
 	<start name="pointer">

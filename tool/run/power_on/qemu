@@ -4,8 +4,6 @@
 # Reset the target machine or rather run the scenario with Qemu
 #
 
-source [genode_dir]/tool/run/qemu.inc
-
 proc check_version {qemu_version qemu_min qemu_max} {
 	set version_min_list [split $qemu_min ".-"]
 	set version_min_list_len [llength $version_min_list]
@@ -112,7 +110,7 @@ proc run_power_on { } {
 	if {[have_spec virt_qemu]} {
 		append qemu_args " -M virt,virtualization=true"
 		if {[have_spec arm_v8a]} {
-			append qemu_args ",gic_version=3 -cpu cortex-a53 -smp 4"
+			append qemu_args ",gic-version=3 -cpu cortex-a53 -smp 4"
 		}
 		if {[have_spec arm_v7a]} {
 			append qemu_args " -cpu cortex-a15 -smp 2"

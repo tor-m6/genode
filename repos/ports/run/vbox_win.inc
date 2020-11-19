@@ -25,7 +25,7 @@ if {[info exists flavor_extension]} {
 }
 
 set build_components {
-	server/input_filter
+	server/event_filter
 	drivers/nic
 	drivers/audio
 	server/report_rom
@@ -33,9 +33,9 @@ set build_components {
 }
 
 set boot_modules {
-	input_filter
+	event_filter
 	ipxe_nic_drv
-	audio_drv
+	pci_audio_drv
 	report_rom
 	dynamic_rom
 }
@@ -45,16 +45,12 @@ if {$use_vbox5_nova} { set virtualbox5_binary "virtualbox5-nova" }
 
 set config_of_app {
 
-	<start name="input_filter">
+	<start name="event_filter">
 		<resource name="RAM" quantum="1M" />
 		<provides>
-			<service name="Input" />
+			<service name="Event" />
 		</provides>
 		<config>}
-append_if [expr $use_ps2] config_of_app {
-			<input label="ps2"/> }
-append_if [expr $use_usb] config_of_app {
-			<input label="usb_hid"/>}
 append config_of_app {
 			<output>
 				<merge>}
@@ -64,14 +60,15 @@ append_if [expr $use_usb] config_of_app {
 					<input name="usb_hid"/>}
 append config_of_app {
 				</merge>
-			</output>
-		</config>
-		<route> }
+			</output>}
 append_if [expr $use_ps2] config_of_app {
-			<service name="Input" label="ps2"> <child name="ps2_drv" /> </service> }
+			<policy label="ps2" input="ps2"/> }
 append_if [expr $use_usb] config_of_app {
-			<service name="Input" label="usb_hid"> <child name="usb_drv" /> </service> }
+			<policy label="usb_hid" input="usb_hid"/>}
 append config_of_app {
+		</config>
+		<route>
+			<service name="Event"> <child name="nitpicker"/> </service>
 			<any-service> <parent /> <any-child /> </any-service>
 		</route>
 	</start>
@@ -94,6 +91,7 @@ append config_of_app {
 		(Recording is configured to use the external mic.)
 	-->
 	<start name="audio_drv" priority="-1">
+		<binary name="pci_audio_drv"/>
 		<resource name="RAM" quantum="9M"/>
 		<provides>
 			<service name="Audio_out"/>
@@ -125,9 +123,10 @@ append config_of_app {
 
 	<start name="nitpicker" priority="-1" caps="150">
 		<resource name="RAM" quantum="12M"/>
-		<provides> <service name="Gui"/> <service name="Capture"/> </provides>
+		<provides>
+			<service name="Gui"/> <service name="Capture"/> <service name="Event"/>
+		</provides>
 		<route>
-			<service name="Input"> <child name="input_filter" /> </service>
 			<service name="Report"> <child name="report_rom" /> </service>
 			<service name="ROM" label="config">
 				<child name="dynamic-config" label="nitpicker.config"/> </service>
@@ -181,8 +180,8 @@ append config_of_app {
 			</rom>
 			<rom name="nitpicker.config">
 				<inline description="standard_mode">
-					<config request_framebuffer="no">
-						<capture/>
+					<config>
+						<capture/> <event/>
 						<report focus="yes" hover="yes" />
 
 						<domain name="pointer"  layer="1" content="client" label="no" origin="pointer" />
@@ -198,8 +197,8 @@ append config_of_app {
 
 append_if [expr !$use_rumpfs] config_of_app {
 				<inline description="shutdown">
-					<config request_framebuffer="no">
-						<capture/>
+					<config>
+						<capture/> <event/>
 						<report focus="yes" hover="yes" />
 
 						<domain name="pointer"  layer="1" content="client" label="no" origin="pointer" />

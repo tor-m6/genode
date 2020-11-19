@@ -110,6 +110,20 @@ namespace Genode {
 }
 
 
+/********************
+ ** Signal_context **
+ ********************/
+
+void Signal_context::local_submit()
+{
+	if (_receiver) {
+		/* construct and locally submit signal object */
+		Signal::Data signal(this, 1);
+		_receiver->local_submit(signal);
+	}
+}
+
+
 /*****************************
  ** Signal context registry **
  *****************************/
@@ -235,13 +249,14 @@ void Signal_receiver::block_for_signal()
 	_signal_available.down();
 }
 
+
 Signal Signal_receiver::pending_signal()
 {
 	Mutex::Guard contexts_guard(_contexts_mutex);
 	Signal::Data result;
-	_contexts.for_each_locked([&] (Signal_context &context) {
+	_contexts.for_each_locked([&] (Signal_context &context) -> bool {
 
-		if (!context._pending) return;
+		if (!context._pending) return false;
 
 		_contexts.head(context._next);
 		context._pending     = false;
@@ -249,7 +264,7 @@ Signal Signal_receiver::pending_signal()
 		context._curr_signal = Signal::Data(0, 0);
 
 		Trace::Signal_received trace_event(context, result.num);
-		throw Context_ring::Break_for_each();
+		return true;
 	});
 	if (result.context) {
 		Mutex::Guard context_guard(result.context->_mutex);
@@ -268,9 +283,8 @@ Signal Signal_receiver::pending_signal()
 	 * signal, we may have increased the semaphore already. In this case
 	 * the signal-causing context is absent from the list.
 	 */
-	throw Signal_not_pending();
+	return Signal();
 }
-
 
 void Signal_receiver::unblock_signal_waiter(Rpc_entrypoint &)
 {
@@ -278,16 +292,16 @@ void Signal_receiver::unblock_signal_waiter(Rpc_entrypoint &)
 }
 
 
-void Signal_receiver::local_submit(Signal::Data ns)
+void Signal_receiver::local_submit(Signal::Data data)
 {
-	Signal_context *context = ns.context;
+	Signal_context *context = data.context;
 
 	/*
 	 * Replace current signal of the context by signal with accumulated
 	 * counters. In the common case, the current signal is an invalid
 	 * signal with a counter value of zero.
 	 */
-	unsigned num = context->_curr_signal.num + ns.num;
+	unsigned num = context->_curr_signal.num + data.num;
 	context->_curr_signal = Signal::Data(context, num);
 
 	/* wake up the receiver if the context becomes pending */

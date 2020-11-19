@@ -41,16 +41,16 @@ install_config {
 		<provides><service name="Timer"/></provides>
 	</start>
 
-	<start name="drivers" caps="1500">
-		<resource name="RAM" quantum="64M" constrain_phys="yes"/>
+	<start name="drivers" caps="1500" managing_system="yes">
+		<resource name="RAM" quantum="64M"/>
 		<binary name="init"/>
 		<route>
 			<service name="ROM" label="config"> <parent label="drivers.config"/> </service>
 			<service name="Timer">   <child name="timer"/> </service>
 			<service name="Capture"> <child name="nitpicker"/> </service>
+			<service name="Event">   <child name="nitpicker"/> </service>
 			<any-service> <parent/> </any-service>
 		</route>
-		<provides> <service name="Input"/> </provides>
 	</start>
 
 	<start name="report_rom">
@@ -74,12 +74,11 @@ install_config {
 				<attribute name="enabled" /> </input>
 
 			<output node="config">
-				<attribute name="request_framebuffer" value="no"/>
 				<attribute name="focus" value="rom"/>
 				<inline>
 					<report focus="yes" xray="yes" hover="yes" keystate="yes"
 					        clicked="yes"/>
-					<capture/>
+					<capture/> <event/>
 					<domain name="pointer" layer="1" origin="pointer"
 					        content="client" label="no"/>
 					<domain name="panel" layer="2"
@@ -150,7 +149,9 @@ install_config {
 
 	<start name="nitpicker" caps="120">
 		<resource name="RAM" quantum="1216K"/>
-		<provides> <service name="Gui"/> <service name="Capture"/> </provides>
+		<provides>
+			<service name="Gui"/> <service name="Capture"/> <service name="Event"/>
+		</provides>
 		<route>
 			<service name="ROM" label="config">
 				<child name="nitpicker_config"/> </service>
@@ -205,7 +206,7 @@ puts $launchpad_config_fd {<config>
 		<config resize_handle="on" />
 	</launcher>
 	<launcher name="nitpicker" ram_quota="1M" caps="100">
-		<config>
+		<config request_input="yes" request_framebuffer="yes">
 			<domain name="" layer="3" conten="client" label="no" focus="click"/>
 			<default-policy domain="" />
 		</config>

@@ -8,7 +8,7 @@ CC_WARN += -Wall
 SRC_CC = frontend/main.cc frontend/console.cc \
          frontend/VirtualBoxErrorInfoImpl.cpp \
          devices.cc drivers.cc dummies.cc libc.cc \
-         logger.cc mm.cc pdm.cc pgm.cc rt.cc \
+         mm.cc pdm.cc pgm.cc rt.cc \
          hm.cc thread.cc dynlib.cc unimpl.cc
 
 LIBS  += base
@@ -55,4 +55,4 @@ INC_DIR += $(VBOX_DIR)/Main/xml
 INC_DIR += $(VBOX_DIR)/HostServices
 
 # search path to 'scan_code_set_2.h'
-INC_DIR += $(call select_from_repositories,src/drivers/input/spec/ps2)
+INC_DIR += $(call select_from_repositories,src/drivers/ps2)

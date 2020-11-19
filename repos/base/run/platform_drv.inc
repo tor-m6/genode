@@ -45,7 +45,7 @@ proc usb_host_drv_binary { } {
 #
 proc audio_drv_binary { } {
 	if {[have_spec linux]} { return linux_audio_drv }
-	if {[have_spec x86]}   { return audio_drv }
+	if {[have_spec x86]}   { return pci_audio_drv }
 	return no_audio_drv_available
 }
 
@@ -63,16 +63,6 @@ proc acpi_drv_name { } {
 		return acpica }
 
 	return acpi_drv
-}
-
-##
-# Return name of the gpio driver
-#
-proc gpio_drv { } {
-	if {[have_spec rpi]}     { return rpi_gpio_drv     }
-	if {[have_spec imx53]}   { return imx53_gpio_drv   }
-	if {[have_spec imx6]}    { return imx6_gpio_drv    }
-	return no_gpio_drv_available
 }
 
 proc platform_drv_build_components {} {
@@ -251,9 +241,9 @@ proc platform_drv_config {} {
 	if {[have_platform_drv]} {
 
 		append drv_config {
-	<start name="platform_drv" } [platform_drv_priority] { caps="800">
+	<start name="platform_drv" } [platform_drv_priority] { caps="800" managing_system="yes">
 		<binary name="} [platform_drv_binary] {"/>
-		<resource name="RAM" quantum="4M" constrain_phys="yes"/>
+		<resource name="RAM" quantum="4M"/>
 		<provides>
 			<service name="Platform"/>}
 

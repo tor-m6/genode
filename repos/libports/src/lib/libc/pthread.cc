@@ -14,7 +14,6 @@
 
 /* Genode includes */
 #include <base/log.h>
-#include <base/sleep.h>
 #include <base/thread.h>
 #include <util/list.h>
 #include <libc/allocator.h>
@@ -32,8 +31,7 @@
 #include <internal/init.h>
 #include <internal/kernel.h>
 #include <internal/pthread.h>
-#include <internal/resume.h>
-#include <internal/suspend.h>
+#include <internal/monitor.h>
 #include <internal/time.h>
 #include <internal/timer.h>
 
@@ -42,20 +40,27 @@ using namespace Libc;
 
 
 static Thread         *_main_thread_ptr;
-static Resume         *_resume_ptr;
-static Suspend        *_suspend_ptr;
+static Monitor        *_monitor_ptr;
 static Timer_accessor *_timer_accessor_ptr;
 
 
-void Libc::init_pthread_support(Suspend &suspend, Resume &resume,
-                                Timer_accessor &timer_accessor)
+void Libc::init_pthread_support(Monitor &monitor, Timer_accessor &timer_accessor)
 {
 	_main_thread_ptr    = Thread::myself();
-	_suspend_ptr        = &suspend;
-	_resume_ptr         = &resume;
+	_monitor_ptr        = &monitor;
 	_timer_accessor_ptr = &timer_accessor;
 }
 
+
+static Libc::Monitor & monitor()
+{
+	struct Missing_call_of_init_pthread_support : Genode::Exception { };
+	if (!_monitor_ptr)
+		throw Missing_call_of_init_pthread_support();
+	return *_monitor_ptr;
+}
+
+namespace { using Fn = Libc::Monitor::Function_result; }
 
 /*************
  ** Pthread **
@@ -74,47 +79,33 @@ void Libc::Pthread::Thread_object::entry()
 
 void Libc::Pthread::join(void **retval)
 {
-	struct Check : Suspend_functor
-	{
-		bool retry { false };
+	monitor().monitor([&] {
+		Genode::Mutex::Guard guard(_mutex);
 
-		Pthread &_thread;
+		if (!_exiting)
+			return Fn::INCOMPLETE;
 
-		Check(Pthread &thread) : _thread(thread) { }
+		if (retval)
+			*retval = _retval;
+		return Fn::COMPLETE;
+	});
+}
 
-		bool suspend() override
-		{
-			retry = !_thread._exiting;
-			return retry;
-		}
-	} check(*this);
 
-	struct Missing_call_of_init_pthread_support : Exception { };
-	if (!_suspend_ptr)
-		throw Missing_call_of_init_pthread_support();
-
-	do {
-		_suspend_ptr->suspend(check);
-	} while (check.retry);
-
-	_join_blockade.block();
-
-	if (retval)
-		*retval = _retval;
+int Libc::Pthread::detach()
+{
+	_detach_blockade.wakeup();
+	return 0;
 }
 
 
 void Libc::Pthread::cancel()
 {
+	Genode::Mutex::Guard guard(_mutex);
+
 	_exiting = true;
 
-	struct Missing_call_of_init_pthread_support : Exception { };
-	if (!_resume_ptr)
-		throw Missing_call_of_init_pthread_support();
-
-	_resume_ptr->resume_all();
-
-	_join_blockade.wakeup();
+	monitor().trigger_monitor_examination();
 }
 
 
@@ -159,6 +150,20 @@ bool Libc::Pthread_registry::contains(Pthread &thread)
 			return true;
 
 	return false;
+}
+
+
+void Libc::Pthread_registry::cleanup(Pthread *new_cleanup_thread)
+{
+	static Mutex cleanup_mutex;
+	Mutex::Guard guard(cleanup_mutex);
+
+	if (_cleanup_thread) {
+		Libc::Allocator alloc { };
+		destroy(alloc, _cleanup_thread);
+	}
+
+	_cleanup_thread = new_cleanup_thread;
 }
 
 
@@ -278,7 +283,7 @@ class pthread_mutex : Genode::Noncopyable
 		/**
 		 * Enqueue current context as applicant for mutex
 		 *
-		 * Return true if mutex was aquired, false on timeout expiration.
+		 * Return true if mutex was acquired, false on timeout expiration.
 		 */
 		bool _apply_for_mutex(pthread_t thread, Libc::uint64_t timeout_ms)
 		{
@@ -505,6 +510,15 @@ struct Libc::Pthread_mutex_recursive : pthread_mutex
 };
 
 
+/*
+ * The pthread_cond implementation uses the POSIX semaphore API
+ * internally that does not have means to set the clock. For this
+ * reason the private 'sem_set_clock' function is introduced,
+ * see 'semaphore.cc' for the implementation.
+*/
+extern "C" int sem_set_clock(sem_t *sem, clockid_t clock_id);
+
+
 extern "C" {
 
 	/* Thread */
@@ -564,7 +578,6 @@ extern "C" {
 	void pthread_exit(void *value_ptr)
 	{
 		pthread_self()->exit(value_ptr);
-		sleep_forever();
 	}
 
 	typeof(pthread_exit) _pthread_exit
@@ -618,6 +631,34 @@ extern "C" {
 
 	__attribute__((alias("thr_self")))
 	pthread_t __sys_thr_self(void);
+
+
+	int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate)
+	{
+		if (!attr || !*attr || !detachstate)
+			return EINVAL;
+
+		*detachstate = (*attr)->detach_state;
+
+		return 0;
+	}
+
+	typeof(pthread_attr_getdetachstate) _pthread_attr_getdetachstate
+		__attribute__((alias("pthread_attr_getdetachstate")));
+
+
+	int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate)
+	{
+		if (!attr || !*attr)
+			return EINVAL;
+
+		(*attr)->detach_state = detachstate;
+
+		return 0;
+	}
+
+	typeof(pthread_attr_setdetachstate) _pthread_attr_setdetachstate
+		__attribute__((alias("pthread_attr_setdetachstate")));
 
 
 	int pthread_attr_setstacksize(pthread_attr_t *attr, size_t stacksize)
@@ -698,6 +739,15 @@ extern "C" {
 		__attribute__((alias("pthread_equal")));
 
 
+	int pthread_detach(pthread_t thread)
+	{
+		return thread->detach();
+	}
+
+	typeof(pthread_detach) _pthread_detach
+		__attribute__((alias("pthread_detach")));
+
+
 	void __pthread_cleanup_push_imp(void (*routine)(void*), void *arg,
 	                                struct _pthread_cleanup_info *)
 	{
@@ -771,9 +821,10 @@ extern "C" {
 		pthread_mutextype const type = (!attr || !*attr)
 		                             ? PTHREAD_MUTEX_NORMAL : (*attr)->type;
 		switch (type) {
-		case PTHREAD_MUTEX_NORMAL:     *mutex = new (alloc) Pthread_mutex_normal; break;
-		case PTHREAD_MUTEX_ERRORCHECK: *mutex = new (alloc) Pthread_mutex_errorcheck; break;
-		case PTHREAD_MUTEX_RECURSIVE:  *mutex = new (alloc) Pthread_mutex_recursive; break;
+		case PTHREAD_MUTEX_NORMAL:      *mutex = new (alloc) Pthread_mutex_normal; break;
+		case PTHREAD_MUTEX_ADAPTIVE_NP: *mutex = new (alloc) Pthread_mutex_normal; break;
+		case PTHREAD_MUTEX_ERRORCHECK:  *mutex = new (alloc) Pthread_mutex_errorcheck; break;
+		case PTHREAD_MUTEX_RECURSIVE:   *mutex = new (alloc) Pthread_mutex_recursive; break;
 
 		default:
 			*mutex = nullptr;
@@ -878,11 +929,16 @@ extern "C" {
 		sem_t           signal_sem;
 		sem_t           handshake_sem;
 
-		pthread_cond() : num_waiters(0), num_signallers(0)
+		pthread_cond(clockid_t clock_id) : num_waiters(0), num_signallers(0)
 		{
 			pthread_mutex_init(&counter_mutex, nullptr);
 			sem_init(&signal_sem, 0, 0);
 			sem_init(&handshake_sem, 0, 0);
+
+			if (sem_set_clock(&signal_sem, clock_id)) {
+				struct Invalid_timedwait_clock { };
+				throw Invalid_timedwait_clock();
+			}
 		}
 
 		~pthread_cond()
@@ -894,12 +950,25 @@ extern "C" {
 	};
 
 
+	struct pthread_cond_attr
+	{
+		clockid_t clock_id { CLOCK_REALTIME };
+	};
+
+
 	int pthread_condattr_init(pthread_condattr_t *attr)
 	{
+		static Mutex condattr_init_mutex { };
+
 		if (!attr)
 			return EINVAL;
 
-		*attr = nullptr;
+		try {
+			Mutex::Guard guard(condattr_init_mutex);
+			Libc::Allocator alloc { };
+			*attr = new (alloc) pthread_cond_attr;
+			return 0;
+		} catch (...) { return ENOMEM; }
 
 		return 0;
 	}
@@ -907,9 +976,12 @@ extern "C" {
 
 	int pthread_condattr_destroy(pthread_condattr_t *attr)
 	{
-		/* assert that the attr was produced by the init no-op */
-		if (!attr || *attr != nullptr)
+		if (!attr)
 			return EINVAL;
+
+		Libc::Allocator alloc { };
+		destroy(alloc, *attr);
+		*attr = nullptr;
 
 		return 0;
 	}
@@ -918,11 +990,10 @@ extern "C" {
 	int pthread_condattr_setclock(pthread_condattr_t *attr,
 	                              clockid_t clock_id)
 	{
-		/* assert that the attr was produced by the init no-op */
-		if (!attr || *attr != nullptr)
+		if (!attr)
 			return EINVAL;
 
-		warning(__func__, " not implemented yet");
+		(*attr)->clock_id = clock_id;
 
 		return 0;
 	}
@@ -939,7 +1010,8 @@ extern "C" {
 		try {
 			Mutex::Guard guard(cond_init_mutex);
 			Libc::Allocator alloc { };
-			*cond = new (alloc) pthread_cond;
+			*cond = attr && *attr ? new (alloc) pthread_cond((*attr)->clock_id)
+			                      : new (alloc) pthread_cond(CLOCK_REALTIME);
 			return 0;
 		} catch (...) { return ENOMEM; }
 	}
@@ -1004,8 +1076,18 @@ extern "C" {
 
 		pthread_mutex_lock(&c->counter_mutex);
 		if (c->num_signallers > 0) {
-			if (result == ETIMEDOUT) /* timeout occured */
-				sem_wait(&c->signal_sem);
+			if (result == ETIMEDOUT) {
+				/*
+				 * Another thread may have called pthread_cond_signal(),
+				 * detected this waiter and posted 'signal_sem' concurrently.
+				 *
+				 * We can't consume this post by 'sem_wait(&c->signal_sem)'
+				 * because a third thread may have consumed the post already
+				 * above in sem_wait/timedwait(). So, we just do nothing here
+				 * and accept the spurious wakeup on next
+				 * pthread_cond_wait/timedwait().
+				 */
+			}
 			sem_post(&c->handshake_sem);
 			--c->num_signallers;
 		}

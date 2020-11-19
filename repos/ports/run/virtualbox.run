@@ -36,7 +36,7 @@ source ${genode_dir}/repos/base/run/platform_drv.inc
 proc platform_drv_priority {} { return { priority="-1"} }
 
 lappend_if [expr $use_top]    build_components app/top
-lappend_if [expr $use_ps2]    build_components drivers/input
+lappend_if [expr $use_ps2]    build_components drivers/ps2
 lappend_if [expr $use_usb]    build_components drivers/usb
 lappend_if [expr $use_serial] build_components server/log_terminal
 lappend_if [have_spec x86]    build_components drivers/rtc
@@ -86,13 +86,12 @@ append_platform_drv_config
 append_if [expr $use_ps2] config {
 	<start name="ps2_drv" priority="-1">
 		<resource name="RAM" quantum="2M"/>
-		<provides><service name="Input"/></provides>
+		<config/>
 	</start>}
 
 append_if [expr $use_usb] config {
 	<start name="usb_drv" priority="-1" caps="120">
-		<resource name="RAM" quantum="12M"/>
-		<provides><service name="Input"/></provides>}
+		<resource name="RAM" quantum="12M"/>}
 
 append_if [expr $use_usb] config {
 		<config uhci="yes" ehci="yes" xhci="yes">
@@ -114,7 +113,6 @@ append_if [have_spec framebuffer] config {
 append_if [have_spec sdl] config {
 	<start name="fb_sdl" priority="-1" ld="no">
 		<resource name="RAM" quantum="4M"/>
-		<provides> <service name="Input"/> </provides>
 	</start>}
 
 append_if [have_spec x86] config {
@@ -166,20 +164,17 @@ append config {
 
 	<start name="nitpicker" priority="-1">
 		<resource name="RAM" quantum="4M"/>
-		<provides> <service name="Gui"/> <service name="Capture"/> </provides>
+		<provides>
+			<service name="Gui"/> <service name="Capture"/> <service name="Event"/>
+		</provides>
 		<route>
 			<service name="Report"> <child name="report_rom" /> </service>}
-
-append_if [expr $use_ps2] config {
-			<service name="Input"> <child name="ps2_drv"/> </service>}
-append_if [expr $use_usb] config {
-			<service name="Input"> <child name="usb_drv"/> </service>}
 
 append config {
 			<any-service> <parent/> <any-child /> </any-service>
 		</route>
-		<config request_framebuffer="no">
-			<capture/>
+		<config>
+			<capture/> <event/>
 
 			<report focus="yes" hover="yes" xray="yes" />
 
@@ -222,8 +217,6 @@ append_if [expr $use_gui] config {
 			<service name="Nic"> <child name="nic_bridge"/> </service>
 			<service name="Report" label="shape"> <child name="pointer" label="gui_fb2 -> shape"/> </service>
 			<service name="Report"> <child name="report_rom"/> </service>
-			<service name="Framebuffer"> <child name="gui_fb2" /> </service>
-			<service name="Input"> <child name="gui_fb2" /> </service>
 			<any-service> <parent /> <any-child /> </any-service>
 		</route>
 	</start>}
@@ -256,8 +249,6 @@ append_if [expr $use_bridge] config {
 append config {
 			<service name="Report" label="shape"> <child name="pointer" label="gui_fb1 -> shape"/> </service>
 			<service name="Report"> <child name="report_rom"/> </service>
-			<service name="Framebuffer"> <child name="gui_fb1" /> </service>
-			<service name="Input"> <child name="gui_fb1" /> </service>
 			<any-service> <parent /> <any-child /> </any-service>
 		</route>
 	</start>

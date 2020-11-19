@@ -15,7 +15,7 @@ if { [have_include "power_on/qemu"] || ![have_spec nova] || ![have_spec x86_64]}
 
 set build_components {
 	drivers/framebuffer
-	drivers/input
+	drivers/ps2
 	drivers/usb
 	server/log_terminal
 	server/fs_rom
@@ -70,7 +70,7 @@ append config {
 
 	<start name="ps2_drv" priority="-1">
 		<resource name="RAM" quantum="1M"/>
-		<provides><service name="Input"/></provides>
+		<config/>
 	</start>
 
 	<start name="usb_config_fs" priority="-1">
@@ -152,13 +152,15 @@ append config {
 
 	<start name="nitpicker" priority="-1">
 		<resource name="RAM" quantum="12M"/>
-		<provides> <service name="Gui"/> <service name="Capture"/> </provides>
+		<provides>
+			<service name="Gui"/> <service name="Capture"/> <service name="Event"/>
+		</provides>
 		<route>
 			<service name="Report"> <child name="report_rom" /> </service>
 			<any-service> <parent/> <any-child /> </any-service>
 		</route>
-		<config request_framebuffer="no">
-			<capture/>
+		<config>
+			<capture/> <event/>
 			<report focus="yes" hover="yes" />
 
 			<domain name="pointer"  layer="1" content="client" label="no" origin="pointer" />
@@ -272,12 +274,12 @@ if { ![get_cmd_switch --autopilot] } { run_genode_until forever }
 
 # autopilot test
 
-run_genode_until {\[init -\> log_terminal\] \[init -\> test-input\] Input event #0\t} 90
+run_genode_until {\[init -\> log_terminal\] \[init -\> event_dump\] Input event #0\t} 90
 
 # remove everything before the first interesting line
-regexp {(\[init -\> log_terminal\] \[init -\> test-input\] Input event #0\t.*)} $output all output
+regexp {(\[init -\> log_terminal\] \[init -\> event_dump\] Input event #0\t.*)} $output all output
 
-run_genode_until {.*\[init -\> test-input\] Input event #11.*\n} 60 [output_spawn_id]
+run_genode_until {.*\[init -\> event_dump\] Input event #11.*\n} 60 [output_spawn_id]
 
 unify_output { number [0-9]+} ""
 unify_output {(?n)on usb-dummy.*$} ""
@@ -292,12 +294,12 @@ filter_out_color_escape_sequences
 trim_lines
 
 compare_output_to {
-[init -> log_terminal] [init -> test-input] Input event #0	PRESS KEY_X 65534	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #1	RELEASE KEY_X	key count: 0
-[init -> log_terminal] [init -> test-input] Input event #2	PRESS BTN_LEFT 65534	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #3	REL_MOTION -1+0	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #4	REL_MOTION +0+1	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #5	RELEASE BTN_LEFT	key count: 0
+[init -> log_terminal] [init -> event_dump] Input event #0	PRESS KEY_X 65534	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #1	RELEASE KEY_X	key count: 0
+[init -> log_terminal] [init -> event_dump] Input event #2	PRESS BTN_LEFT 65534	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #3	REL_MOTION -1+0	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #4	REL_MOTION +0+1	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #5	RELEASE BTN_LEFT	key count: 0
 [init -> usb_drv] dev_info: USB disconnect, device
 [init -> log_terminal] [init -> usb_drv] dev_info: USB disconnect, device
 [init -> usb_drv] dev_info: new full-speed USB device
@@ -307,10 +309,10 @@ compare_output_to {
 [init -> log_terminal] [init -> usb_drv] dev_info: input: USB HID v1.11 Keyboard [D L]
 [init -> log_terminal] [init -> usb_drv] dev_info: D L
 [init -> log_terminal] [init -> usb_drv] dev_info: input: USB HID v1.11 Mouse [D L]
-[init -> log_terminal] [init -> test-input] Input event #6	PRESS KEY_X 65534	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #7	RELEASE KEY_X	key count: 0
-[init -> log_terminal] [init -> test-input] Input event #8	PRESS BTN_LEFT 65534	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #9	REL_MOTION -1+0	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #10	REL_MOTION +0+1	key count: 1
-[init -> log_terminal] [init -> test-input] Input event #11	RELEASE BTN_LEFT	key count: 0
+[init -> log_terminal] [init -> event_dump] Input event #6	PRESS KEY_X 65534	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #7	RELEASE KEY_X	key count: 0
+[init -> log_terminal] [init -> event_dump] Input event #8	PRESS BTN_LEFT 65534	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #9	REL_MOTION -1+0	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #10	REL_MOTION +0+1	key count: 1
+[init -> log_terminal] [init -> event_dump] Input event #11	RELEASE BTN_LEFT	key count: 0
 }

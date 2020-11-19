@@ -39,6 +39,7 @@ __stdoutp D 8
 __swbuf T
 __test_sse T
 __xuname T
+_Exit T
 _exit T
 _getlong T
 _getshort T
@@ -237,6 +238,7 @@ fwprintf T
 fwrite T
 fwscanf T
 gai_strerror T
+genode_cache_coherent T
 getaddrinfo T
 getbootfile T
 getbsize T
@@ -417,7 +419,6 @@ lcong48 T
 ldexp T
 ldiv T
 lfind T
-libc_select_notify V
 link W
 listen T
 llabs T
@@ -493,6 +494,7 @@ popen T
 posix2time T
 posix_fadvise T
 posix_madvise T
+posix_memalign T
 posix_spawn T
 posix_spawn_file_actions_addclose T
 posix_spawn_file_actions_adddup2 T
@@ -975,6 +977,7 @@ _ZN4Libc7suspendERNS_15Suspend_functorEm T
 _Z16pthread_registryv T
 _ZN4Libc16Pthread_registry6insertERNS_7PthreadE T
 _ZN4Libc16Pthread_registry6removeERNS_7PthreadE T
+_ZN4Libc16Pthread_registry7cleanupEPNS_7PthreadE T
 _ZN4Libc16Pthread_registry8containsERNS_7PthreadE T
 _ZN4Libc14pthread_createEPP7pthreadPFPvS3_ES3_mPKcPN6Genode11Cpu_sessionENS8_8Affinity8LocationE T
 _ZN4Libc14pthread_createEPP7pthreadRN6Genode6ThreadE T
@@ -982,7 +985,6 @@ _ZN4Libc14pthread_createEPP7pthreadRN6Genode6ThreadE T
 #
 # Libc plugin interface
 #
-_ZN4Libc16schedule_suspendEPFvvE T
 _ZN4Libc25File_descriptor_allocator15find_by_libc_fdEi T
 _ZN4Libc25File_descriptor_allocator4freeEPNS_15File_descriptorE T
 _ZN4Libc25File_descriptor_allocator5allocEPNS_6PluginEPNS_14Plugin_contextEi T
@@ -1028,7 +1030,7 @@ _ZN4Libc6Plugin5closeEPNS_15File_descriptorE T
 _ZN4Libc6Plugin5fcntlEPNS_15File_descriptorEil T
 _ZN4Libc6Plugin5fstatEPNS_15File_descriptorEP4stat T
 _ZN4Libc6Plugin5fsyncEPNS_15File_descriptorE T
-_ZN4Libc6Plugin5ioctlEPNS_15File_descriptorEiPc T
+_ZN4Libc6Plugin5ioctlEPNS_15File_descriptorEmPc T
 _ZN4Libc6Plugin5lseekEPNS_15File_descriptorEli T
 _ZN4Libc6Plugin5lseekEPNS_15File_descriptorExi T
 _ZN4Libc6Plugin5mkdirEPKct T
@@ -1077,7 +1079,10 @@ _ZTIN4Libc6PluginE D 40
 _Unwind_Complete T
 _Unwind_DeleteException T
 _Unwind_Resume T
+_ZN10__cxxabiv120__si_class_type_infoD2Ev T
+_ZN9__gnu_cxx9__freeresEv T
 _ZNK10__cxxabiv117__class_type_info10__do_catchEPKSt9type_infoPPvj T
+_ZNK10__cxxabiv117__class_type_info11__do_upcastEPKS0_PPv T
 _ZNK10__cxxabiv120__si_class_type_info11__do_upcastEPKNS_17__class_type_infoEPKvRNS1_15__upcast_resultE T
 _ZNK10__cxxabiv120__si_class_type_info12__do_dyncastElNS_17__class_type_info10__sub_kindEPKS1_PKvS4_S6_RNS1_16__dyncast_resultE T
 _ZNK10__cxxabiv120__si_class_type_info20__do_find_public_srcElPKvPKNS_17__class_type_infoES2_ T
@@ -1086,9 +1091,25 @@ _ZNKSt9exception4whatEv T
 _ZNSt13bad_exceptionD0Ev T
 _ZNSt13bad_exceptionD1Ev T
 _ZNSt13bad_exceptionD2Ev T
+_ZNSt15__exception_ptr13exception_ptr4swapERS0_ T
+_ZNSt15__exception_ptr13exception_ptrC1EPv T
+_ZNSt15__exception_ptr13exception_ptrC1ERKS0_ T
+_ZNSt15__exception_ptr13exception_ptrC1Ev T
+_ZNSt15__exception_ptr13exception_ptrD1Ev T
+_ZNSt15__exception_ptr13exception_ptraSERKS0_ T
+_ZNSt15__exception_ptreqERKNS_13exception_ptrES2_ T
+_ZNSt15__exception_ptrneERKNS_13exception_ptrES2_ T
+_ZNSt16nested_exceptionD1Ev T
+_ZNSt16nested_exceptionD2Ev T
 _ZNSt9exceptionD0Ev T
 _ZNSt9exceptionD1Ev T
 _ZNSt9exceptionD2Ev T
+_ZSt13get_terminatev T
+_ZSt13set_terminatePFvvE T
+_ZSt14get_unexpectedv T
+_ZSt14set_unexpectedPFvvE T
+_ZSt17current_exceptionv T
+_ZSt17rethrow_exceptionNSt15__exception_ptr13exception_ptrE T
 _ZSt18uncaught_exceptionv T
 _ZSt19uncaught_exceptionsv T
 _ZSt9terminatev T
@@ -1178,11 +1199,13 @@ _ZTIPl D 32
 _ZTIPm D 32
 _ZTIPs D 32
 _ZTIPt D 32
+_ZTIPv D 32
 _ZTIPx D 32
 _ZTIPy D 32
 _ZTISt10bad_typeid D 24
 _ZTISt13bad_exception D 24
 _ZTISt16bad_array_length D 24
+_ZTISt16nested_exception D 16
 _ZTISt20bad_array_new_length D 24
 _ZTISt8bad_cast D 24
 _ZTISt9bad_alloc D 24
@@ -1201,6 +1224,7 @@ _ZTIl D 32
 _ZTIm D 32
 _ZTIs D 32
 _ZTIt D 32
+_ZTIv D 32
 _ZTIx D 32
 _ZTIy D 32
 _ZTSN10__cxxabiv115__forced_unwindE R 32
@@ -1231,9 +1255,11 @@ _ZTVN10__cxxabiv120__function_type_infoE D 64
 _ZTVN10__cxxabiv120__si_class_type_infoE D 88
 _ZTVN10__cxxabiv121__vmi_class_type_infoE D 88
 _ZTVN10__cxxabiv123__fundamental_type_infoE D 64
+_ZTVN10__cxxabiv129__pointer_to_member_type_infoE V
 _ZTVSt10bad_typeid D 40
 _ZTVSt13bad_exception D 40
 _ZTVSt16bad_array_length D 40
+_ZTVSt16nested_exception D 32
 _ZTVSt20bad_array_new_length D 40
 _ZTVSt8bad_cast D 40
 _ZTVSt9bad_alloc D 40
@@ -1266,14 +1292,17 @@ __cxa_get_globals_fast T
 __cxa_guard_abort T
 __cxa_guard_acquire T
 __cxa_guard_release T
+__cxa_init_primary_exception T
 __cxa_pure_virtual T
 __cxa_rethrow T
 __cxa_throw T
 __cxa_throw_bad_array_length T
 __cxa_throw_bad_array_new_length T
 __cxa_type_match T
+__cxa_vec_new T
 __dynamic_cast T
 __emutls_get_address T
+__gcc_personality_v0 T
 __gxx_personality_v0 T
 __stack_chk_fail W
 __stack_chk_guard B 8

@@ -16,7 +16,6 @@
 #include <base/attached_rom_dataspace.h>
 #include <base/allocator_avl.h>
 #include <base/heap.h>
-#include <input_session/connection.h>
 #include <block_session/connection.h>
 
 namespace Test {
@@ -129,11 +128,6 @@ struct Test::Main
 
 	Main(Env &env) : _env(env)
 	{
-		if (_config.xml().has_sub_node("check_input")) {
-			log("connect to input driver");
-			Input::Connection input(_env);
-		}
-
 		_block_devices.sigh(_block_devices_update_handler);
 		_check_conditions();
 	}

@@ -68,14 +68,16 @@ struct Sculpt::Main : Input_event_handler,
 
 	Registry<Child_state> _child_states { };
 
-	Constructible<Gui::Connection> _gui { };
+	Gui::Connection _gui { _env, "input" };
+
+	Gui::Root _gui_root { _env, _heap, *this };
 
 	Signal_handler<Main> _input_handler {
 		_env.ep(), *this, &Main::_handle_input };
 
 	void _handle_input()
 	{
-		_gui->input()->for_each_event([&] (Input::Event const &ev) {
+		_gui.input()->for_each_event([&] (Input::Event const &ev) {
 			handle_input_event(ev); });
 	}
 
@@ -106,20 +108,13 @@ struct Sculpt::Main : Input_event_handler,
 		_handle_gui_mode();
 	}
 
-	Managed_config<Main> _input_filter_config {
-		_env, "config", "input_filter", *this, &Main::_handle_input_filter_config };
+	Managed_config<Main> _event_filter_config {
+		_env, "config", "event_filter", *this, &Main::_handle_event_filter_config };
 
-	void _handle_input_filter_config(Xml_node)
+	void _handle_event_filter_config(Xml_node)
 	{
-		_input_filter_config.try_generate_manually_managed();
+		_event_filter_config.try_generate_manually_managed();
 	}
-
-	Attached_rom_dataspace _gui_hover { _env, "nitpicker_hover" };
-
-	Signal_handler<Main> _gui_hover_handler {
-		_env.ep(), *this, &Main::_handle_gui_hover };
-
-	void _handle_gui_hover();
 
 
 	/**********************
@@ -363,6 +358,7 @@ struct Sculpt::Main : Input_event_handler,
 
 	Attached_rom_dataspace _editor_saved_rom { _env, "report -> runtime/editor/saved" };
 
+	Affinity::Space _affinity_space { 1, 1 };
 
 	/**
 	 * Panel_dialog::State interface
@@ -613,6 +609,7 @@ struct Sculpt::Main : Input_event_handler,
 	void cancel_format(Storage_target const &target) override
 	{
 		_storage.cancel_format(target);
+		_graph.reset_storage_operation();
 	}
 
 	void expand(Storage_target const &target) override
@@ -623,6 +620,7 @@ struct Sculpt::Main : Input_event_handler,
 	void cancel_expand(Storage_target const &target) override
 	{
 		_storage.cancel_expand(target);
+		_graph.reset_storage_operation();
 	}
 
 	void check(Storage_target const &target) override
@@ -641,6 +639,17 @@ struct Sculpt::Main : Input_event_handler,
 	void remove_deployed_component(Start_name const &name) override
 	{
 		_runtime_state.abandon(name);
+
+		/* update config/managed/deploy with the component 'name' removed */
+		_deploy.update_managed_deploy_config(_manual_deploy_rom.xml());
+	}
+
+	/*
+	 * Graph::Action interface
+	 */
+	void restart_deployed_component(Start_name const &name) override
+	{
+		_runtime_state.restart(name);
 
 		/* update config/managed/deploy with the component 'name' removed */
 		_deploy.update_managed_deploy_config(_manual_deploy_rom.xml());
@@ -886,7 +895,7 @@ struct Sculpt::Main : Input_event_handler,
 	Start_name new_construction(Component::Path const &pkg,
 	                            Component::Info const &info) override
 	{
-		return _runtime_state.new_construction(pkg, info);
+		return _runtime_state.new_construction(pkg, info, _affinity_space);
 	}
 
 	void _apply_to_construction(Popup_dialog::Action::Apply_to &fn) override
@@ -983,44 +992,6 @@ struct Sculpt::Main : Input_event_handler,
 		_fb_drv_config.try_generate_manually_managed();
 	}
 
-	Attached_rom_dataspace _gui_displays { _env, "displays" };
-
-	Signal_handler<Main> _gui_displays_handler {
-		_env.ep(), *this, &Main::_handle_gui_displays };
-
-	void _handle_gui_displays()
-	{
-		_gui_displays.update();
-
-		if (!_gui_displays.xml().has_sub_node("display"))
-			return;
-
-		if (_gui.constructed())
-			return;
-
-		/*
-		 * Since the nitpicker GUI server has successfully issued the first
-		 * 'displays' report, there is a good chance that the framebuffer
-		 * driver is running. This is a good time to activate the GUI.
-		 */
-		_gui.construct(_env, "input");
-		_gui->input()->sigh(_input_handler);
-		_gui->mode_sigh(_gui_mode_handler);
-
-		/*
-		 * Adjust GUI parameters to initial GUI mode
-		 */
-		_handle_gui_mode();
-
-		/*
-		 * Avoid 'Constructible<Gui::Root>' because it requires the definition
-		 * of 'Gui::Session_component'.
-		 */
-		static Gui::Root gui_nitpicker(_env, _heap, *this);
-
-		generate_runtime_config();
-	}
-
 	void _handle_window_layout();
 
 	template <size_t N, typename FN>
@@ -1064,13 +1035,13 @@ struct Sculpt::Main : Input_event_handler,
 		_manual_deploy_rom.sigh(_manual_deploy_handler);
 		_runtime_state_rom.sigh(_runtime_state_handler);
 		_runtime_config_rom.sigh(_runtime_config_handler);
-		_gui_displays.sigh(_gui_displays_handler);
+		_gui.input()->sigh(_input_handler);
+		_gui.mode_sigh(_gui_mode_handler);
 
 		/*
 		 * Subscribe to reports
 		 */
 		_update_state_rom    .sigh(_update_state_handler);
-		_gui_hover           .sigh(_gui_hover_handler);
 		_pci_devices         .sigh(_pci_devices_handler);
 		_window_list         .sigh(_window_list_handler);
 		_decorator_margins   .sigh(_decorator_margins_handler);
@@ -1086,10 +1057,19 @@ struct Sculpt::Main : Input_event_handler,
 		/*
 		 * Import initial report content
 		 */
+		_handle_gui_mode();
 		_storage.handle_storage_devices_update();
 		_deploy.handle_deploy();
 		_handle_pci_devices();
 		_handle_runtime_config();
+
+		/*
+		 * Read static platform information
+		 */
+		_platform.xml().with_sub_node("affinity-space", [&] (Xml_node const &node) {
+			_affinity_space = Affinity::Space(node.attribute_value("width",  1U),
+			                                  node.attribute_value("height", 1U));
+		});
 
 		/*
 		 * Generate initial config/managed/deploy configuration
@@ -1128,9 +1108,6 @@ void Sculpt::Main::_handle_window_layout()
 
 	unsigned const log_min_w = 400;
 
-	if (!_gui.constructed())
-		return;
-
 	typedef String<128> Label;
 	Label const
 		inspect_label          ("runtime -> leitzentrale -> inspect"),
@@ -1159,7 +1136,11 @@ void Sculpt::Main::_handle_window_layout()
 	if (panel_height == 0)
 		return;
 
-	Framebuffer::Mode const mode = _gui->mode();
+	Framebuffer::Mode const mode = _gui.mode();
+
+	/* suppress intermediate boot-time states before the framebuffer driver is up */
+	if (mode.area.count() <= 1)
+		return;
 
 	/* area reserved for the panel */
 	Rect const panel(Point(0, 0), Area(mode.area.w(), panel_height));
@@ -1325,10 +1306,7 @@ void Sculpt::Main::_handle_window_layout()
 
 void Sculpt::Main::_handle_gui_mode()
 {
-	if (!_gui.constructed())
-		return;
-
-	Framebuffer::Mode const mode = _gui->mode();
+	Framebuffer::Mode const mode = _gui.mode();
 
 	_handle_window_layout();
 
@@ -1390,15 +1368,7 @@ void Sculpt::Main::_handle_gui_mode()
 		});
 	}
 
-	/* font size may has changed */
-	_panel_menu_view.trigger_restart();
-	_main_menu_view.trigger_restart();
-	_file_browser_menu_view.trigger_restart();
-	_network.trigger_dialog_restart();
-	_graph_menu_view.trigger_restart();
-	_popup_menu_view.trigger_restart();
-	_settings_menu_view.trigger_restart();
-
+	/* font size may has changed, propagate fonts config of runtime view */
 	generate_runtime_config();
 }
 
@@ -1406,29 +1376,6 @@ void Sculpt::Main::_handle_gui_mode()
 Sculpt::Dialog::Hover_result Sculpt::Main::hover(Xml_node hover)
 {
 	return _storage.dialog.match_sub_dialog(hover, "vbox", "frame", "vbox");
-}
-
-
-void Sculpt::Main::_handle_gui_hover()
-{
-	if (!_storage._discovery_state.discovery_in_progress())
-		return;
-
-	/* check if initial user activity has already been evaluated */
-	if (_storage._discovery_state.user_state != Discovery_state::USER_UNKNOWN)
-		return;
-
-	_gui_hover.update();
-	Xml_node const hover = _gui_hover.xml();
-	if (!hover.has_type("hover"))
-		return;
-
-	_storage._discovery_state.user_state = hover.attribute_value("active", false)
-	                                     ? Discovery_state::USER_INTERVENED
-	                                     : Discovery_state::USER_IDLE;
-
-	/* trigger re-evaluation of default storage target */
-	_storage.handle_storage_devices_update();
 }
 
 
@@ -1498,7 +1445,7 @@ void Sculpt::Main::_handle_runtime_state()
 					partition.check_in_progress = 0;
 					reconfigure_runtime = true;
 					_storage.dialog.reset_operation();
-					_graph.reset_operation();
+					_graph.reset_storage_operation();
 				}
 			}
 
@@ -1518,7 +1465,7 @@ void Sculpt::Main::_handle_runtime_state()
 
 					reconfigure_runtime = true;
 					_storage.dialog.reset_operation();
-					_graph.reset_operation();
+					_graph.reset_storage_operation();
 				}
 			}
 
@@ -1530,11 +1477,21 @@ void Sculpt::Main::_handle_runtime_state()
 					reconfigure_runtime = true;
 					device.rediscover();
 					_storage.dialog.reset_operation();
-					_graph.reset_operation();
+					_graph.reset_storage_operation();
 				}
 			}
 
 		}); /* for each partition */
+
+		/* respond to failure of part_block */
+		if (device.discovery_in_progress()) {
+			Child_exit_state exit_state(state, device.part_block_start_name());
+			if (!exit_state.responsive) {
+				error(device.part_block_start_name(), " got stuck");
+				device.state = Storage_device::RELEASED;
+				reconfigure_runtime = true;
+			}
+		}
 
 		/* respond to completion of GPT relabeling */
 		if (device.relabel_in_progress()) {
@@ -1543,7 +1500,7 @@ void Sculpt::Main::_handle_runtime_state()
 				device.rediscover();
 				reconfigure_runtime = true;
 				_storage.dialog.reset_operation();
-				_graph.reset_operation();
+				_graph.reset_storage_operation();
 			}
 		}
 
@@ -1562,7 +1519,7 @@ void Sculpt::Main::_handle_runtime_state()
 
 				reconfigure_runtime = true;
 				_storage.dialog.reset_operation();
-				_graph.reset_operation();
+				_graph.reset_storage_operation();
 			}
 		}
 
@@ -1665,6 +1622,8 @@ void Sculpt::Main::_generate_runtime_config(Xml_generator &xml) const
 		xml.attribute("buffer",     "1M");
 	});
 
+	xml.node("heartbeat", [&] () { xml.attribute("rate_ms", 1000); });
+
 	xml.node("parent-provides", [&] () {
 		gen_parent_service<Rom_session>(xml);
 		gen_parent_service<Cpu_session>(xml);
@@ -1686,11 +1645,9 @@ void Sculpt::Main::_generate_runtime_config(Xml_generator &xml) const
 		gen_parent_service<Irq_session>(xml);
 	});
 
-	_platform.xml().with_sub_node("affinity-space", [&] (Xml_node const &node) {
-		xml.node("affinity-space", [&] () {
-			xml.attribute("width",  node.attribute_value("width",  1U));
-			xml.attribute("height", node.attribute_value("height", 1U));
-		});
+	xml.node("affinity-space", [&] () {
+		xml.attribute("width",  _affinity_space.width());
+		xml.attribute("height", _affinity_space.height());
 	});
 
 	xml.node("start", [&] () {

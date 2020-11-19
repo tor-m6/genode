@@ -193,6 +193,7 @@ void Ssh::Server::_cleanup_session(Session &s)
 	ssh_channel_free(s.channel);
 	s.channel = nullptr;
 
+	ssh_blocking_flush(s.session, 5*1000);
 	ssh_event_remove_session(_event_loop, s.session);
 	ssh_disconnect(s.session);
 	ssh_free(s.session);
@@ -376,18 +377,18 @@ void Ssh::Server::detach_terminal(Ssh::Terminal &conn)
 	auto invalidate_terminal = [&] (Session &sess) {
 
 		Libc::with_libc([&] () {
-			ssh_blocking_flush(sess.session, 10000);
-			ssh_disconnect(sess.session);
 			if (sess.terminal != &conn) { return; }
 			sess.terminal = nullptr;
+			sess.terminal_detached = true;
 		});
 	};
 	_sessions.for_each(invalidate_terminal);
-	_cleanup_sessions();
 
 	Libc::with_libc([&] () {
 		Genode::destroy(&_heap, p);
 	});
+
+	_wake_loop();
 }
 
 
@@ -598,7 +599,8 @@ void Ssh::Server::loop()
 
 			/* first remove all stale sessions */
 			auto cleanup = [&] (Session &s) {
-				if (ssh_is_connected(s.session)) { return ; }
+				if (!s.terminal_detached
+				    && ssh_is_connected(s.session)) { return ; }
 				_cleanup_session(s);
 			};
 			_sessions.for_each(cleanup);

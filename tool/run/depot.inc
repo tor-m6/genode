@@ -444,12 +444,12 @@ proc check_for_missing_depot_archives { } {
 
 	if {[llength $local_user_archives]} {
 		append create_args " CROSS_DEV_PREFIX=[cross_dev_prefix]"
-		puts stderr "You may create the following archives locally:\n"
+		puts stderr "You may create the following archives locally by executing:\n"
 		puts stderr "  [genode_dir]/tool/depot/create $local_user_archives$create_args\n"
 	}
 
 	if {[llength $foreign_archives]} {
-		puts stderr "You may try to download the following archives:\n"
+		puts stderr "You may try to download the following archives by executing:\n"
 		puts stderr "  [genode_dir]/tool/depot/download $foreign_archives\n"
 	}
 
@@ -487,7 +487,7 @@ proc drivers_nic_pkg { } {
 	if {[have_spec imx6q_sabrelite]} { return drivers_nic-imx6q_sabrelite }
 	if {[have_spec imx7d_sabre]}     { return drivers_nic-imx7d_sabre     }
 	if {[have_spec imx8q_evk]}       { return drivers_nic-imx8q_evk       }
-
+	if {[have_spec virt_qemu]}       { return drivers_nic-virt_qemu       }
 
 	puts stderr "drivers_nic package undefined for this build configuration"
 	exit 1

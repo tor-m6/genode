@@ -18,7 +18,6 @@
 #include <base/attached_rom_dataspace.h>
 #include <input/event.h>
 #include <input/keycodes.h>
-#include <input_session/connection.h>
 #define Framebuffer Fb_Genode
 #include <gui_session/connection.h>
 #undef Framebuffer
@@ -26,7 +25,7 @@
 #include <report_session/connection.h>
 #include <timer_session/connection.h>
 
-/* included from os/src/drivers/input/spec/ps2 */
+/* included from os/src/drivers/ps2 */
 #include <scan_code_set_1.h>
 
 /* repos/ports includes */

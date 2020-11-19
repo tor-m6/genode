@@ -41,7 +41,7 @@ lappend_if [expr $use_serial] build_components server/log_terminal
 lappend_if [expr $use_rumpfs] build_components lib/vfs/rump
 lappend_if [expr $use_rumpfs] build_components server/vfs
 lappend_if [expr $use_vbox5]  build_components virtualbox5
-lappend_if [expr $use_ps2]    build_components drivers/input
+lappend_if [expr $use_ps2]    build_components drivers/ps2
 lappend_if [expr $use_usb]    build_components drivers/usb
 lappend_if [expr $use_usb]    build_components app/usb_report_filter
 lappend_if [have_spec x86]    build_components drivers/rtc
@@ -203,7 +203,7 @@ append_if [expr $use_ram_fs && $use_overlay_from_disk] config {
 append_if [expr $use_rumpfs && $use_ram_fs && $use_overlay_from_disk] config {
 			<service name="File_system"><child name="rump_fs"/></service>}
 append_if [expr $use_ram_fs && $use_overlay_from_disk] config {
-			<any-service><parent/><any-child/></any-service>
+			<any-service> <parent/> <any-child/> </any-service>
 		</route>
 	</start>}
 
@@ -212,8 +212,11 @@ append_platform_drv_config
 append_if [expr $use_ps2] config {
 	<start name="ps2_drv" priority="-1">
 		<resource name="RAM" quantum="1M"/>
-		<provides><service name="Input"/></provides>
 		<config/>
+		<route>
+			<service name="Event"> <child name="event_filter" label="ps2"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
 	</start>}
 
 append_if [expr $use_cpu_load] config {
@@ -336,12 +339,10 @@ append_if [expr $use_usb] config {
 
 	<start name="usb_drv" priority="-1" caps="120">
 		<resource name="RAM" quantum="20M"/>
-		<provides>
-			<service name="Input"/>
-			<service name="Usb"/>
-		</provides>
+		<provides> <service name="Usb"/> </provides>
 		<route>
-			<service name="Report"><child name="report_rom"/></service>
+			<service name="Report"> <child name="report_rom"/> </service>
+			<service name="Event"> <child name="event_filter" label="usb_hid"/> </service>
 			<service name="ROM" label="config">
 				<child name="usb_config_rom" label="usb_drv.config"/> </service>
 			<any-service><parent/><any-child/></any-service>
@@ -352,7 +353,7 @@ append_if [expr $use_usb] config {
 append_if [have_spec framebuffer] config {
 	<start name="fb_drv" priority="-1" caps="150">
 		<binary name="vesa_fb_drv"/>
-		<resource name="RAM" quantum="16M"/>
+		<resource name="RAM" quantum="32M"/>
 		<config/>
 	</start>}
 

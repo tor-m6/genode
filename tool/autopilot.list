@@ -1,5 +1,8 @@
+aes_cbc_4k
 bomb
+cbe_tester
 cpu_bench
+cpu_balancer
 cpu_quota
 cpu_sampler
 demo
@@ -14,7 +17,7 @@ fs_query
 gdb_monitor
 ieee754
 init_smp
-input_filter
+event_filter
 libc_vfs_fs_ext2
 log_core
 lwip
@@ -22,6 +25,7 @@ lx_hybrid_ctors
 lx_hybrid_exception
 lx_hybrid_pthread_ipc
 microcode
+migrate
 moon
 netperf_lwip
 netperf_lwip_bridge
@@ -58,6 +62,7 @@ sub_rm
 tar_rom
 thread
 timeout
+timeout_smp
 timer_accuracy
 tz_vmm
 usb_hid
