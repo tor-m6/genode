@@ -169,7 +169,6 @@ class Cpu::Trace
 
 struct Cpu::Sleeper : Genode::Thread
 {
-	Genode::List_element<Sleeper>  _list_element { this };
 	Genode::Env                   &_env;
 	Genode::Blockade               _block { };
 

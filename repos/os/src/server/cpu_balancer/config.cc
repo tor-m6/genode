@@ -29,14 +29,13 @@ void Cpu::Config::apply(Xml_node const &start, Child_list &sessions)
 
 		Label const label = node.attribute_value("label", Label(""));
 
-		for (auto element = sessions.first(); element; element = element ->next()) {
-			auto session = element->object();
-			if (!session || !session->match(label))
-				continue;
+		sessions.for_each([&](auto &session) {
+			if (!session.match(label))
+				return;
 
 			if (node.has_attribute("default_policy")) {
 				Cpu::Policy::Name const policy = node.attribute_value("default_policy", Cpu::Policy::Name());
-				session->default_policy(policy);
+				session.default_policy(policy);
 			}
 
 			node.for_each_sub_node("thread", [&](Xml_node const &thread) {
@@ -55,8 +54,8 @@ void Cpu::Config::apply(Xml_node const &start, Child_list &sessions)
 					                              thread.attribute_value("ypos", 0U),
 					                              1, 1);
 
-				session->config(name, policy, location);
+				session.config(name, policy, location);
 			});
-		}
+		});
 	});
 }

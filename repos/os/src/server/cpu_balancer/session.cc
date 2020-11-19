@@ -146,15 +146,11 @@ Cpu::Session::Session(Env &env,
 		env.close(_id.id());
 		throw;
 	}
-
-	_list.insert(&_list_element);
 }
 
 Cpu::Session::~Session()
 {
 	/* _threads don't need to be cleaned up, but cause warnings */
-
-	_list.remove(&_list_element);
 
 	_env.ep().rpc_ep().dissolve(this);
 
@@ -193,7 +189,7 @@ bool Cpu::Session::report_state(Xml_generator &xml) const
 
 		xml.attribute("default_policy", _default_policy);
 
-		apply([&](Thread_capability &,
+		apply([&](Thread_capability const &,
 		          Thread::Name const &name,
 		          Subject_id const &, Cpu::Policy const &policy,
 		          bool const enforced_policy)

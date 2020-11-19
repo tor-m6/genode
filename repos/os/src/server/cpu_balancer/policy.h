@@ -1,4 +1,5 @@
 /*
+ * \brief  Policy evaluation
  * \author Alexander Boettcher
  * \date   2020-10-08
  */
@@ -227,20 +228,14 @@ class Cpu::Policy_max_utilize : public Cpu::Policy
 			bool case_a = current_idle > 1000; /* XXX which threshold ? */
 			bool case_b = thread_time  > remote_idle;
 
-#if 0
-			Genode::log("at ", current.xpos(), "x", current.ypos(),
-			            " idle=", current_idle,
-			            " last=", thread_time,
-			            ", at ", to.xpos(), "x", to.ypos(),
-			            " most_idle=", remote_idle,
-			            " (max_idle=", max_idle, ")",
-			            " case_a=", case_a,
-			            " case_b=", case_b);
-#else
-			(void)current;
-			(void)to;
-			(void)max_idle;
-#endif
+			if (false)
+				Genode::log("at ", current.xpos(), "x", current.ypos(),
+				            " idle=", current_idle,
+				            " last=", thread_time,
+				            ", at ", to.xpos(), "x", to.ypos(),
+				            " most_idle=", remote_idle,
+				            " (max_idle=", max_idle, ")",
+				            " case_b=", case_b);
 
 			if (case_a)
 				return false;

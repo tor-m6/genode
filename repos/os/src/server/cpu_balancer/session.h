@@ -17,6 +17,7 @@
 /* Genode includes */
 #include <base/env.h>
 #include <base/heap.h>
+#include <base/registry.h>
 #include <base/rpc_server.h>
 #include <base/trace/types.h>
 #include <cpu_session/client.h>
@@ -32,17 +33,15 @@ namespace Cpu {
 	class Session;
 	class Trace;
 	class Policy;
-	struct ThreadX;
-	typedef Id_space<Parent::Client>::Element Client_id;
-	typedef List<List_element<Session> >      Child_list;
-	typedef List<List_element<ThreadX> >      Thread_list;
-	typedef Constrained_ram_allocator         Ram_allocator;
+	struct Thread_client;
+	typedef Id_space<Parent::Client>::Element    Client_id;
+	typedef Registry<Registered<Session> >       Child_list;
+	typedef Registry<Registered<Thread_client> > Thread_list;
+	typedef Constrained_ram_allocator            Ram_allocator;
 }
 
-struct Cpu::ThreadX
+struct Cpu::Thread_client : Interface
 {
-		List_element<ThreadX>  _list_element { this };
-
 		Thread_capability      _cap    { };
 		Genode::Thread::Name   _name   { };
 		Subject_id             _id     { };
@@ -53,8 +52,6 @@ struct Cpu::ThreadX
 class Cpu::Session : public Rpc_object<Cpu_session>
 {
 	private:
-
-		List_element<Session>  _list_element { this };
 
 		Child_list            &_list;
 		Env                   &_env;
@@ -104,58 +101,56 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 
 		bool _one_valid_thread() const
 		{
-			for (auto t = _threads.first(); t; t = t->next()) {
-				auto thread = t->object();
-				if (!thread)
-					continue;
+			bool valid = false;
 
-				if (thread->_cap.valid())
-					return true;
-			}
+			_threads.for_each([&](auto &thread) {
+				if (valid)
+					return;
 
-			return false;
+				if (thread._cap.valid())
+					valid = true;
+			});
+
+			return valid;
 		}
 
 		template <typename FUNC>
 		void _for_each_thread(FUNC const &fn)
 		{
-			for (auto t = _threads.first(); t; t = t->next()) {
-				auto thread = t->object();
-				if (!thread)
-					continue;
+			bool done = false;
 
-				bool done = fn(thread);
+			_threads.for_each([&](auto &thread) {
 				if (done)
-					break;
-			}
+					return;
+
+				done = fn(thread);
+			});
 		}
 
 		template <typename FUNC>
 		void _for_each_thread(FUNC const &fn) const
 		{
-			for (auto t = _threads.first(); t; t = t->next()) {
-				auto thread = t->object();
-				if (!thread)
-					continue;
+			bool done = false;
 
-				bool done = fn(thread);
+			_threads.for_each([&](auto const &thread) {
 				if (done)
-					break;
-			}
+					return;
+
+				done = fn(thread);
+			});
 		}
 
 		template <typename FUNC>
 		void kill(Thread_capability const &cap, FUNC const &fn)
 		{
-			_for_each_thread([&](ThreadX *thread) {
-				if (!(thread->_cap.valid()) || !(thread->_cap == cap))
+			_for_each_thread([&](Thread_client &thread) {
+				if (!(thread._cap.valid()) || !(thread._cap == cap))
 					return false;
 
-				fn(thread->_cap, thread->_name, thread->_id, *thread->_policy);
+				fn(thread._cap, thread._name, thread._id, *thread._policy);
 
-				destroy(_md_alloc, thread->_policy);
-				_threads.remove(&thread->_list_element);
-				destroy(_md_alloc, thread);
+				destroy(_md_alloc, thread._policy);
+				destroy(_md_alloc, &thread);
 
 				return true;
 			});
@@ -164,24 +159,24 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 		template <typename FUNC>
 		void apply(FUNC const &fn)
 		{
-			_for_each_thread([&](ThreadX *thread) {
-				if (!thread->_cap.valid())
+			_for_each_thread([&](Thread_client &thread) {
+				if (!thread._cap.valid())
 					return false;
 
-				return fn(thread->_cap, thread->_name,
-				          thread->_id, *thread->_policy, thread->_fix);
+				return fn(thread._cap, thread._name, thread._id,
+				          *thread._policy, thread._fix);
 			});
 		}
 
 		template <typename FUNC>
 		void apply(FUNC const &fn) const
 		{
-			_for_each_thread([&](ThreadX *thread) {
-				if (!thread->_cap.valid())
+			_for_each_thread([&](Thread_client const &thread) {
+				if (!thread._cap.valid())
 					return false;
 
-				return fn(thread->_cap, thread->_name,
-				          thread->_id, *thread->_policy, thread->_fix);
+				return fn(thread._cap, thread._name,
+				          thread._id, *thread._policy, thread._fix);
 			});
 		}
 
@@ -191,11 +186,11 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 			if (!name.valid())
 				return;
 
-			_for_each_thread([&](ThreadX *thread) {
-				if (thread->_name != name)
+			_for_each_thread([&](Thread_client &thread) {
+				if (thread._name != name)
 					return false;
 
-				return fn(thread->_cap, *thread->_policy);
+				return fn(thread._cap, *thread._policy);
 			});
 		}
 
@@ -209,25 +204,25 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 
 			bool done = false;
 
-			_for_each_thread([&](ThreadX *thread) {
-				if (thread->_name != thread_name)
+			_for_each_thread([&](Thread_client &thread) {
+				if (thread._name != thread_name)
 					return false;
 
-				if (thread->_fix) {
+				if (thread._fix) {
 					done = true;
 					return true;
 				}
 
-				if (!thread->_policy->same_type(policy_name)) {
+				if (!thread._policy->same_type(policy_name)) {
 					Cpu::Policy * new_policy = nullptr;
-					construct_policy(policy_name, &new_policy, thread->_policy->location);
+					construct_policy(policy_name, &new_policy, thread._policy->location);
 
 					/* construct policy may throw, so we keep old policy up to here */
-					destroy(_md_alloc, thread->_policy);
-					thread->_policy = new_policy;
+					destroy(_md_alloc, thread._policy);
+					thread._policy = new_policy;
 				}
 
-				fn(thread->_cap, *thread->_policy);
+				fn(thread._cap, *thread._policy);
 				done = true;
 				return true;
 			});
@@ -246,12 +241,11 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 		template <typename FUNC>
 		void construct(Cpu::Policy::Name const &policy_name, FUNC const &fn)
 		{
-			ThreadX * thread = nullptr;
+			Thread_client * thread = nullptr;
 
 			try {
 				try {
-					thread = new (_md_alloc) ThreadX();
-					_threads.insert(&thread->_list_element);
+					thread = new (_md_alloc) Registered<Thread_client>(_threads);
 
 					construct_policy(policy_name, &thread->_policy, Affinity::Location());
 
@@ -279,7 +273,6 @@ class Cpu::Session : public Rpc_object<Cpu_session>
 					if (thread->_policy)
 						destroy(_md_alloc, thread->_policy);
 
-					_threads.remove(&thread->_list_element);
 					destroy(_md_alloc, thread);
 				}
 				throw;

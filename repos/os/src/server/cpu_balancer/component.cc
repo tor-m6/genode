@@ -1,4 +1,5 @@
 /*
+ * \brief  CPU service proxy that migrates threads depending on policies
  * \author Alexander Boettcher
  * \date   2020-07-16
  */
@@ -13,6 +14,7 @@
 #include <base/attached_rom_dataspace.h>
 #include <base/component.h>
 #include <base/heap.h>
+#include <base/registry.h>
 #include <base/signal.h>
 
 #include <cpu_session/cpu_session.h>
@@ -63,8 +65,8 @@ auto retry(T &env, FUNC func, HANDLER handler,
 	return;
 }
 
-typedef Genode::List<Genode::List_element<Cpu::Sleeper> > Sleeper_list;
-typedef Genode::Tslab<Cpu::Sleeper, 4096>                 Tslab_sleeper;
+typedef Genode::Registry<Genode::Registered<Cpu::Sleeper> >   Sleeper_list;
+typedef Genode::Tslab<Genode::Registered<Cpu::Sleeper>, 4096> Tslab_sleeper;
 
 struct Cpu::Balancer : Rpc_object<Typed_root<Cpu_session>>
 {
@@ -167,12 +169,13 @@ struct Cpu::Balancer : Rpc_object<Typed_root<Cpu_session>>
 
 			Mutex::Guard guard(list_mutex);
 
-			Session * session = new (slice) Session(env, affinity,
-			                                        session_args, list, verbose);
+			auto * session = new (slice) Registered<Session>(list, env,
+			                                                 affinity,
+			                                                 session_args,
+			                                                 list, verbose);
 
 			/* check for config of new session */
-			Cpu::Config import;
-			import.apply(config.xml(), list);
+			Cpu::Config::apply(config.xml(), list);
 
 			return session->cap();
 		});
@@ -236,10 +239,8 @@ struct Cpu::Balancer : Rpc_object<Typed_root<Cpu_session>>
 
 		for (unsigned i = 0; i < space.total(); i++) {
 			Affinity::Location location = env.cpu().affinity_space().location_of_index(i);
-			Sleeper *t = new (alloc_thread) Sleeper(env, location);
+			Sleeper *t = new (alloc_thread) Genode::Registered<Sleeper>(sleeper, env, location);
 			t->start();
-
-			sleeper.insert(&t->_list_element);
 		}
 
 		handle_config();
@@ -267,8 +268,7 @@ void Cpu::Balancer::handle_config()
 		use_sleeper = config.xml().attribute_value("sleeper", use_sleeper);
 
 		/* read in components configuration */
-		Cpu::Config import;
-		import.apply(config.xml(), list);
+		Cpu::Config::apply(config.xml(), list);
 	}
 
 	if (verbose)
@@ -276,21 +276,13 @@ void Cpu::Balancer::handle_config()
 		    ", report=", use_report, ", interval=", timer_us,"us");
 
 	/* also start all subsystem if no valid config is available */
-	if (use_trace) {
-		if (!trace.constructed())
-			trace.construct(env);
-		if (!label.valid())
-			label = trace->lookup_my_label();
-	} else
-		trace.destruct();
+	trace.conditional(use_trace, env);
+	if (use_trace && !label.valid())
+		label = trace->lookup_my_label();
 
-	if (use_report) {
-		if (!reporter.constructed()) {
-			reporter.construct(env, "components", "components", report_size);
-			reporter->enabled(true);
-		}
-	} else
-		reporter.destruct();
+	reporter.conditional(use_report, env, "components", "components", report_size);
+	if (use_report)
+		reporter->enabled(true);
 
 	if (timer_us != time_us)
 		timer.trigger_periodic(time_us);
@@ -302,13 +294,8 @@ void Cpu::Balancer::handle_timeout()
 
 	if (use_sleeper) {
 		/* wake all sleepers to get more accurate idle CPU utilization times */
-		for (auto t = sleeper.first(); t; t = t->next()) {
-			auto thread = t->object();
-			if (!thread)
-				continue;
-
-			thread->_block.wakeup();
-		}
+		sleeper.for_each([](auto &thread) {
+			thread._block.wakeup(); });
 	}
 
 	/* remember current reread state */
@@ -319,20 +306,16 @@ void Cpu::Balancer::handle_timeout()
 	}
 
 	/* update all sessions */
-	for (auto x = list.first(); x; x = x ->next()) {
-		auto session = x->object();
-		if (!session)
-			continue;
-
+	list.for_each([&](auto &session) {
 		if (trace.constructed()) {
-			session->update_threads(*trace, label);
+			session.update_threads(*trace, label);
 		}
 		else
-			session->update_threads();
+			session.update_threads();
 
-		if (session->report_update())
+		if (session.report_update())
 			update_report = true;
-	}
+	});
 
 	/* reset reread state if it did not change in between */
 	if (trace.constructed() && trace->subject_id_reread() &&
@@ -344,13 +327,9 @@ void Cpu::Balancer::handle_timeout()
 
 		retry<Genode::Xml_generator::Buffer_exceeded>(env, [&] () {
 			Reporter::Xml_generator xml(*reporter, [&] () {
-				for (auto x = list.first(); x; x = x ->next()) {
-					auto session = x->object();
-					if (!session)
-						continue;
-
-					reset_report |= session->report_state(xml);
-				}
+				list.for_each([&](auto &session) {
+					reset_report |= session.report_state(xml);
+				});
 			});
 		}, [&] () {
 			report_size += 4096;
@@ -359,13 +338,9 @@ void Cpu::Balancer::handle_timeout()
 		});
 
 		if (reset_report) {
-			for (auto x = list.first(); x; x = x ->next()) {
-				auto session = x->object();
-				if (!session)
-					continue;
-
-				session->reset_report_state();
-			}
+			list.for_each([](auto &session) {
+				session.reset_report_state();
+			});
 		}
 
 		update_report = false;
