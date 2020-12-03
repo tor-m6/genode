@@ -12,15 +12,7 @@ CONFIGURE_ARGS +=	--srcdir=$(PKG_DIR)/ \
 			--cache-file=./config.cache \
 			--disable-multilib \
 			--disable-shared \
-			--with-multilib-list=m64 \
-			--disable-libada \
-			--with-gnu-as \
 			--with-gnu-ld \
-			--disable-tls \
-			--disable-threads \
-			--disable-hosted-libstdcxx \
-			--disable-sjlj-exceptions \
-			--enable-languages=c,ada,c++,go,lto \
 			--build=x86_64-pc-elf\
 			--host=genode-x86
 

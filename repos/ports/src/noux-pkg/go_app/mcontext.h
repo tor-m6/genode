@@ -8,14 +8,13 @@
 #define MCONTEXT_H
 
 #include <ucontext.h>
-//#include <signal.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern	int	_getmcontext(mcontext_t*);
-extern	int _setmcontext(const mcontext_t*);
+	extern int _getmcontext(mcontext_t*);
+	extern int _setmcontext(const mcontext_t*);
 
 #ifdef __cplusplus
 };

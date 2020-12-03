@@ -1,5 +1,5 @@
 /*
- * \brief  libc file operations
+ * \brief  Libc file operations
  * \author Christian Prochaska
  * \author Norman Feske
  * \author Emery Hemingway
@@ -68,18 +68,18 @@ static unsigned int  _mmap_align_log2 { PAGE_SHIFT };
 static Genode::Allocator *_alloc_ptr;
 
 void Libc::init_file_operations(Cwd &cwd,
-								Config_accessor const &config_accessor,
-								Genode::Allocator &alloc)
+                                Config_accessor const &config_accessor,
+                                Genode::Allocator &alloc)
 {
 	_cwd_ptr = &cwd;
 	_alloc_ptr = &alloc;
 
 	config_accessor.config().with_sub_node("libc", [&] (Xml_node libc) {
-		libc.with_sub_node("mmap", [&] (Xml_node mmap) {
-			_mmap_align_log2 = mmap.attribute_value("align_log2",
-			                                        (unsigned int)PAGE_SHIFT);
-		});
-	});
+		                                       libc.with_sub_node("mmap", [&] (Xml_node mmap) {
+			                                                          _mmap_align_log2 = mmap.attribute_value("align_log2",
+			                                                                                                  (unsigned int)PAGE_SHIFT);
+		                                                          });
+	                                       });
 }
 
 Genode::Allocator *kernel_allocator()
@@ -151,8 +151,8 @@ void Libc::resolve_symlinks(char const *path, Absolute_path &resolved_path)
 
 		while (t) {
 			if (t.type() != Path_element_token::IDENT) {
-					t = t.next();
-					continue;
+				t = t.next();
+				continue;
 			}
 
 			t.string(path_element, sizeof(path_element));
@@ -177,8 +177,8 @@ void Libc::resolve_symlinks(char const *path, Absolute_path &resolved_path)
 				}
 				if (S_ISLNK(stat_buf.st_mode)) {
 					FNAME_FUNC_WRAPPER_GENERIC(res = , readlink,
-					                           next_iteration_working_path.base(),
-					                           symlink_target, sizeof(symlink_target) - 1);
+					                                 next_iteration_working_path.base(),
+					                                 symlink_target, sizeof(symlink_target) - 1);
 					if (res < 1)
 						throw Symlink_resolve_error();
 
@@ -186,6 +186,7 @@ void Libc::resolve_symlinks(char const *path, Absolute_path &resolved_path)
 					symlink_target[res] = 0;
 
 					if (symlink_target[0] == '/')
+
 						/* absolute target */
 						next_iteration_working_path.import(symlink_target, cwd().base());
 					else {
@@ -251,8 +252,7 @@ extern "C" int access(const char *path, int amode)
 extern "C" int chdir(const char *path)
 {
 	struct stat stat_buf;
-	if ((stat(path, &stat_buf) == -1) ||
-	    (!S_ISDIR(stat_buf.st_mode))) {
+	if ((stat(path, &stat_buf) == -1) || (!S_ISDIR(stat_buf.st_mode))) {
 		errno = ENOTDIR;
 		return -1;
 	}
@@ -266,15 +266,15 @@ extern "C" int chdir(const char *path)
  */
 __SYS_(int, close, (int libc_fd),
 {
-	File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
+	       File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
 
-	if (!fd)
-		return Errno(EBADF);
+	       if (!fd)
+		       return Errno(EBADF);
 
-	if (!fd->plugin || fd->plugin->close(fd) != 0)
-		file_descriptor_allocator()->free(fd);
+	       if (!fd->plugin || fd->plugin->close(fd) != 0)
+		       file_descriptor_allocator()->free(fd);
 
-	return 0;
+	       return 0;
 })
 
 
@@ -332,75 +332,74 @@ extern "C" int fchdir(int libc_fd)
 
 __SYS_(int, fcntl, (int libc_fd, int cmd, ...),
 {
-	va_list ap;
-	int res;
-	va_start(ap, cmd);
-	FD_FUNC_WRAPPER_GENERIC(res =, INVALID_FD, fcntl, libc_fd, cmd, va_arg(ap, long));
-	va_end(ap);
-	return res;
+	       va_list ap;
+	       int res;
+	       va_start(ap, cmd);
+	       FD_FUNC_WRAPPER_GENERIC(res =, INVALID_FD, fcntl, libc_fd, cmd, va_arg(ap, long));
+	       va_end(ap);
+	       return res;
 })
 
 
 __SYS_(int, fstat, (int libc_fd, struct stat *buf),
 {
-	FD_FUNC_WRAPPER(fstat, libc_fd, buf);
+	       FD_FUNC_WRAPPER(fstat, libc_fd, buf);
 })
 
 
 __SYS_(int, fstatat, (int libc_fd, char const *path, struct stat *buf, int flags),
 {
-	if (*path == '/') {
-		if (flags & AT_SYMLINK_NOFOLLOW)
-			return lstat(path, buf);
-		return stat(path, buf);
-	}
+	       if (*path == '/') {
+		       if (flags & AT_SYMLINK_NOFOLLOW)
+			       return lstat(path, buf);
+		       return stat(path, buf);
+	       }
 
-	Absolute_path abs_path;
+	       Absolute_path abs_path;
 
-	if (libc_fd == AT_FDCWD) {
-		abs_path = cwd();
-		abs_path.append_element(path);
-	} else {
-		File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
-		if (!fd) {
-			errno = EBADF;
-			return -1;
-		}
-		abs_path.import(path, fd->fd_path);
-	}
+	       if (libc_fd == AT_FDCWD) {
+		       abs_path = cwd();
+		       abs_path.append_element(path);
+	       } else {
+		       File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
+		       if (!fd) {
+			       errno = EBADF;
+			       return -1;
+		       }
+		       abs_path.import(path, fd->fd_path);
+	       }
 
-	return (flags & AT_SYMLINK_NOFOLLOW)
-		? lstat(abs_path.base(), buf)
+	       return (flags & AT_SYMLINK_NOFOLLOW)
+	     ? lstat(abs_path.base(), buf)
 		:  stat(abs_path.base(), buf);
 })
 
 
 __SYS_(int, fstatfs, (int libc_fd, struct statfs *buf), {
-	FD_FUNC_WRAPPER(fstatfs, libc_fd, buf); })
+	       FD_FUNC_WRAPPER(fstatfs, libc_fd, buf); })
 
 
-__SYS_(int, fsync, (int libc_fd), {
-	FD_FUNC_WRAPPER(fsync, libc_fd); })
+__SYS_(int, fsync, (int libc_fd), { FD_FUNC_WRAPPER(fsync, libc_fd); })
 
 
 __SYS_(int, fdatasync, (int libc_fd), {
-	FD_FUNC_WRAPPER(fsync, libc_fd); })
+	       FD_FUNC_WRAPPER(fsync, libc_fd); })
 
 
 __SYS_(int, ftruncate, (int libc_fd, ::off_t length), {
-	FD_FUNC_WRAPPER(ftruncate, libc_fd, length); })
+	       FD_FUNC_WRAPPER(ftruncate, libc_fd, length); })
 
 
 __SYS_(ssize_t, getdirentries, (int libc_fd, char *buf, ::size_t nbytes, ::off_t *basep), {
-	FD_FUNC_WRAPPER(getdirentries, libc_fd, buf, nbytes, basep); })
+	       FD_FUNC_WRAPPER(getdirentries, libc_fd, buf, nbytes, basep); })
 
 
 __SYS_(int, ioctl, (int libc_fd, unsigned long request, char *argp), {
-	FD_FUNC_WRAPPER(ioctl, libc_fd, request, argp); })
+	       FD_FUNC_WRAPPER(ioctl, libc_fd, request, argp); })
 
 
 __SYS_(::off_t, lseek, (int libc_fd, ::off_t offset, int whence), {
-	FD_FUNC_WRAPPER(lseek, libc_fd, offset, whence); })
+	       FD_FUNC_WRAPPER(lseek, libc_fd, offset, whence); })
 
 
 extern "C" int lstat(const char *path, struct stat *buf)
@@ -423,67 +422,67 @@ extern "C" int mkdir(const char *path, mode_t mode)
 		resolve_symlinks_except_last_element(path, resolved_path);
 		resolved_path.remove_trailing('/');
 		FNAME_FUNC_WRAPPER(mkdir, resolved_path.base(), mode);
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
 
-namespace Genode
-{
+namespace Genode {
+
 	char *pd_reserve_memory(size_t bytes, void *requested_addr,
-							size_t alignment_hint);
+	                        size_t alignment_hint);
 	bool pd_unmap_memory(void *addr, size_t bytes, bool &area_used);
 	bool pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr);
 	void *pd_get_base_address(void *addr, bool &anon);
-}; // namespace Genode
+}
 
-__SYS_(void *, mmap, (void *addr, ::size_t length, int prot, int flags, int libc_fd, ::off_t offset),
+__SYS_(void *, mmap, (void *addr, ::size_t length,
+                      int prot, int flags,
+                      int libc_fd, ::off_t offset),
 {
-	if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON))
-	{
-		/* handle requests for anonymous memory */
-		bool const executable = prot & PROT_EXEC;
+	       if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON)) {
 
-		/* FIXME do not allow overlap with other areas as in original mmap() - just fail */
-		/* desired address given as addr (mandatory if flags has MAP_FIXED) */
-		void *start = Genode::pd_reserve_memory(length, addr, _mmap_align_log2);
-		if (!start || ((flags & MAP_FIXED) && (start != addr)))
-		{
-			errno = ENOMEM;
-			return MAP_FAILED;
-		}
-		mmap_registry()->insert(start, length, 0);
+		       /* handle requests for anonymous memory */
+		       bool const executable = prot & PROT_EXEC;
 
-		if (prot == PROT_NONE)
-		{
-			/* process request for memory range reservation (no access, no commit) */
-			return start;
-		}
+		       /* FIXME do not allow overlap with other areas as in original mmap() - just fail */
 
-		/* 
-		* desired address returned; commit virtual range
-		*/
-		Genode::pd_commit_memory(start, length, executable, addr != 0);
-		/* zero commited ram */
-		::memset(start, 0, align_addr(length, PAGE_SHIFT));
-		return start;
-	}
+		       /* desired address given as addr (mandatory if flags has MAP_FIXED) */
+		       void *start = Genode::pd_reserve_memory(length, addr, _mmap_align_log2);
+		       if (!start || ((flags & MAP_FIXED) && (start != addr))) {
+			       errno = ENOMEM;
+			       return MAP_FAILED;
+		       }
+		       mmap_registry()->insert(start, length, 0);
 
-	/* lookup plugin responsible for file descriptor */
-	File_descriptor *fd = libc_fd_to_fd(libc_fd, "mmap");
-	if (!fd || !fd->plugin || !fd->plugin->supports_mmap())
-	{
-		warning("mmap not supported for file descriptor ", libc_fd);
-		errno = EBADF;
-		return MAP_FAILED;
-	}
+		       if (prot == PROT_NONE) {
 
-	void *start = fd->plugin->mmap(addr, length, prot, flags, fd, offset);
+			       /* process request for memory range reservation (no access, no commit) */
+			       return start;
+		       }
 
-	if (start != MAP_FAILED)
-		mmap_registry()->insert(start, length, fd->plugin);
+		       /* desired address returned; commit virtual range */
+		       Genode::pd_commit_memory(start, length, executable, addr != 0);
 
-	return start;
+		       /* zero commited ram */
+		       ::memset(start, 0, align_addr(length, PAGE_SHIFT));
+		       return start;
+	       }
+
+	       /* lookup plugin responsible for file descriptor */
+	       File_descriptor *fd = libc_fd_to_fd(libc_fd, "mmap");
+	       if (!fd || !fd->plugin || !fd->plugin->supports_mmap()) {
+		       warning("mmap not supported for file descriptor ", libc_fd);
+		       errno = EBADF;
+		       return MAP_FAILED;
+	       }
+
+	       void *start = fd->plugin->mmap(addr, length, prot, flags, fd, offset);
+
+	       if (start != MAP_FAILED)
+		       mmap_registry()->insert(start, length, fd->plugin);
+
+	       return start;
 })
 
 extern "C" int munmap(void *base, ::size_t length)
@@ -493,8 +492,7 @@ extern "C" int munmap(void *base, ::size_t length)
 	if (!start)
 		start = base;
 
-	if (nanon && !mmap_registry()->registered(start))
-	{
+	if (nanon && !mmap_registry()->registered(start)) {
 		warning("munmap: could not lookup plugin for address ", start);
 		errno = EINVAL;
 		return -1;
@@ -529,101 +527,100 @@ extern "C" int munmap(void *base, ::size_t length)
 
 __SYS_(int, msync, (void *start, ::size_t len, int flags),
 {
-	if (!mmap_registry()->registered(start)) {
-		warning("munmap: could not lookup plugin for address ", start);
-		errno = EINVAL;
-		return -1;
-	}
+	       if (!mmap_registry()->registered(start)) {
+		       warning("munmap: could not lookup plugin for address ", start);
+		       errno = EINVAL;
+		       return -1;
+	       }
 
 	/*
 	 * Lookup plugin that was used for mmap
 	 *
 	 * If the pointer is NULL, 'start' refers to an anonymous mmap.
 	 */
-	Plugin *plugin = mmap_registry()->lookup_plugin_by_addr(start);
+	       Plugin *plugin = mmap_registry()->lookup_plugin_by_addr(start);
 
-	int ret = 0;
-	if (plugin)
-		ret = plugin->msync(start, len, flags);
+	       int ret = 0;
+	       if (plugin)
+		       ret = plugin->msync(start, len, flags);
 
-	return ret;
+	       return ret;
 })
 
 
 __SYS_(int, open, (const char *pathname, int flags, ...),
 {
-	Absolute_path resolved_path;
+	       Absolute_path resolved_path;
 
-	Plugin *plugin;
-	File_descriptor *new_fdo;
+	       Plugin *plugin;
+	       File_descriptor *new_fdo;
 
-	try {
-		resolve_symlinks_except_last_element(pathname, resolved_path);
-	} catch (Symlink_resolve_error) {
-		return -1;
-	}
+	       try {
+		       resolve_symlinks_except_last_element(pathname, resolved_path);
+	       } catch (Symlink_resolve_error) {
+		       return -1;
+	       }
 
-	if (!(flags & O_NOFOLLOW)) {
-		/* resolve last element */
-		try {
-			resolve_symlinks(resolved_path.base(), resolved_path);
-		} catch (Symlink_resolve_error) {
-			if (errno == ENOENT) {
-				if (!(flags & O_CREAT))
-					return -1;
-			} else
-				return -1;
-		}
-	}
+	       if (!(flags & O_NOFOLLOW)) {
+		       /* resolve last element */
+		       try {
+			       resolve_symlinks(resolved_path.base(), resolved_path);
+		       } catch (Symlink_resolve_error) {
+			       if (errno == ENOENT) {
+				       if (!(flags & O_CREAT))
+					       return -1;
+			       } else
+				       return -1;
+		       }
+	       }
 
-	plugin = plugin_registry()->get_plugin_for_open(resolved_path.base(), flags);
+	       plugin = plugin_registry()->get_plugin_for_open(resolved_path.base(), flags);
 
-	if (!plugin) {
-		error("no plugin found for open(\"", pathname, "\", ", flags, ")");
-		return -1;
-	}
+	       if (!plugin) {
+		       error("no plugin found for open(\"", pathname, "\", ", flags, ")");
+		       return -1;
+	       }
 
-	new_fdo = plugin->open(resolved_path.base(), flags);
-	if (!new_fdo)
-		return -1;
-	new_fdo->path(resolved_path.base());
+	       new_fdo = plugin->open(resolved_path.base(), flags);
+	       if (!new_fdo)
+		       return -1;
+	       new_fdo->path(resolved_path.base());
 
-	return new_fdo->libc_fd;
+	       return new_fdo->libc_fd;
 })
 
 
 __SYS_(int, openat, (int libc_fd, const char *path, int flags, ...),
 {
-	va_list ap;
-	va_start(ap, flags);
-	mode_t mode = va_arg(ap, unsigned);
-	va_end(ap);
+	       va_list ap;
+	       va_start(ap, flags);
+	       mode_t mode = va_arg(ap, unsigned);
+	       va_end(ap);
 
 
-	if (*path == '/') {
-		return open(path, flags, mode);
-	}
+	       if (*path == '/') {
+		       return open(path, flags, mode);
+	       }
 
-	Absolute_path abs_path;
+	       Absolute_path abs_path;
 
-	if (libc_fd == AT_FDCWD) {
-		abs_path = cwd();
-		abs_path.append_element(path);
-	} else {
-		File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
-		if (!fd) {
-			errno = EBADF;
-			return -1;
-		}
-		abs_path.import(path, fd->fd_path);
-	}
+	       if (libc_fd == AT_FDCWD) {
+		       abs_path = cwd();
+		       abs_path.append_element(path);
+	       } else {
+		       File_descriptor *fd = file_descriptor_allocator()->find_by_libc_fd(libc_fd);
+		       if (!fd) {
+			       errno = EBADF;
+			       return -1;
+		       }
+		       abs_path.import(path, fd->fd_path);
+	       }
 
-	return open(abs_path.base(), flags, mode);
+	       return open(abs_path.base(), flags, mode);
 })
 
 
-extern "C" int pipe(int pipefd[2]) {
-	return pipe2(pipefd, 0); }
+extern "C" int pipe(int pipefd[2]) { return pipe2(pipefd, 0); }
 
 
 extern "C" int pipe2(int pipefd[2], int flags)
@@ -645,7 +642,7 @@ extern "C" int pipe2(int pipefd[2], int flags)
 
 	if (flags & O_NONBLOCK) {
 		int err = plugin->fcntl(pipefdo[0], F_SETFL, O_NONBLOCK)
-		        | plugin->fcntl(pipefdo[1], F_SETFL, O_NONBLOCK);
+		  | plugin->fcntl(pipefdo[1], F_SETFL, O_NONBLOCK);
 		if (err != 0)
 			warning("pipe plugin does not support O_NONBLOCK");
 	}
@@ -658,7 +655,7 @@ extern "C" int pipe2(int pipefd[2], int flags)
 
 
 __SYS_(ssize_t, read, (int libc_fd, void *buf, ::size_t count), {
-	FD_FUNC_WRAPPER(read, libc_fd, buf, count); })
+	       FD_FUNC_WRAPPER(read, libc_fd, buf, count); })
 
 
 extern "C" ssize_t readlink(const char *path, char *buf, ::size_t bufsiz)
@@ -667,7 +664,7 @@ extern "C" ssize_t readlink(const char *path, char *buf, ::size_t bufsiz)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(path, resolved_path);
 		FNAME_FUNC_WRAPPER(readlink, resolved_path.base(), buf, bufsiz);
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -684,7 +681,7 @@ extern "C" int rename(const char *oldpath, const char *newpath)
 		resolved_newpath.remove_trailing('/');
 
 		FNAME_FUNC_WRAPPER(rename, resolved_oldpath.base(), resolved_newpath.base());
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -708,7 +705,7 @@ extern "C" int rmdir(const char *path)
 		}
 
 		FNAME_FUNC_WRAPPER(rmdir, resolved_path.base());
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -721,7 +718,7 @@ extern "C" int stat(const char *path, struct stat *buf)
 		resolve_symlinks(path, resolved_path);
 		resolved_path.remove_trailing('/');
 		FNAME_FUNC_WRAPPER(stat, resolved_path.base(), buf);
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -733,7 +730,7 @@ extern "C" int symlink(const char *oldpath, const char *newpath)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(newpath, resolved_path);
 		FNAME_FUNC_WRAPPER(symlink, oldpath, resolved_path.base());
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -745,7 +742,7 @@ extern "C" int unlink(const char *path)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(path, resolved_path);
 		FNAME_FUNC_WRAPPER(unlink, resolved_path.base());
-	} catch(Symlink_resolve_error) {
+	} catch (Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -753,12 +750,12 @@ extern "C" int unlink(const char *path)
 
 __SYS_(ssize_t, write, (int libc_fd, const void *buf, ::size_t count),
 {
-	int flags = fcntl(libc_fd, F_GETFL);
+	       int flags = fcntl(libc_fd, F_GETFL);
 
-	if ((flags != -1) && (flags & O_APPEND))
-		lseek(libc_fd, 0, SEEK_END);
+	       if ((flags != -1) && (flags & O_APPEND))
+		       lseek(libc_fd, 0, SEEK_END);
 
-	FD_FUNC_WRAPPER(write, libc_fd, buf, count);
+	       FD_FUNC_WRAPPER(write, libc_fd, buf, count);
 })
 
 

@@ -18,8 +18,7 @@
 
 using namespace Genode;
 
-void
-makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
+void makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 {
 	uintptr_t *sp;
 	va_list va;
@@ -44,7 +43,7 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 		ucp->uc_mcontext.mc_rsi = va_arg(va, int);
 		break;
 	default:
-		abort();	// oops
+		abort();	/* oops */
 		break;
 	}
 	va_end(va);
@@ -53,19 +52,21 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	ucp->uc_mcontext.mc_rip = (long)func;
 	ucp->uc_mcontext.mc_rsp = (long)sp;
 }
+
 __attribute__((noinline))
 static void ___getcontext(ucontext_t* ucp)
 {
-	// take info about genode thread
+	/* take info about genode thread */
 	Thread &myself = *Thread::myself();
 	Thread_capability tcap = myself.cap();
 
 	__int64_t lcap = *(__int64_t *)&tcap;
 	Genode::memset(&ucp->uc_mcontext, 0, sizeof(ucp->uc_mcontext));
 	*(__int64_t *)(&ucp->uc_mcontext.mc_spare[0]) = lcap;
-
 }
+
 int getcontext(ucontext_t * ucp) __attribute__((__returns_twice__));
+
 __attribute__((noinline))
 int getcontext(ucontext_t* ucp)
 {
@@ -77,34 +78,32 @@ int getcontext(ucontext_t* ucp)
 __attribute__((noinline))
 static int  ___setcontext(const ucontext_t* ucp)
 {
-	// take info about genode thread
+	/* take info about genode thread */
 	Thread &myself = *Thread::myself();
 	Thread_capability tcap = myself.cap();
 
 	__int64_t lcap = *(__int64_t *)&tcap;
-	if (lcap != *(__int64_t *)(&ucp->uc_mcontext.mc_spare[0]))
-	{
+	if (lcap != *(__int64_t *)(&ucp->uc_mcontext.mc_spare[0])) {
 		return 0;
-	} else
-	{
-		// same thread, just longjmp
+	} else {
+		/* same thread, just longjmp */
 		return 1;
 	}
 }
+
 __attribute__((noinline))
-int  setcontext(const ucontext_t* ucp)
+int setcontext(const ucontext_t* ucp)
 {
-	if ( ___setcontext(ucp))
-	{	// same
+	if (___setcontext(ucp)) {	/* same */
 		;
 	}
 	_setmcontext(&ucp->uc_mcontext);
-	return 0; // never return
+	return 0; /* never return */
 }
-int
-swapcontext(ucontext_t *oucp, const ucontext_t *ucp)
+
+int swapcontext(ucontext_t *oucp, const ucontext_t *ucp)
 {
-	if(getcontext(oucp) == 0)
+	if (getcontext(oucp) == 0)
 		setcontext(ucp);
 	return 0;
 }
