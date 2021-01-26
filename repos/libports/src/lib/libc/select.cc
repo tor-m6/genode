@@ -272,9 +272,14 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 
 	using Genode::uint64_t;
 
-	uint64_t const timeout_ms = (tv != nullptr)
-	                          ? (uint64_t)tv->tv_sec*1000 + tv->tv_usec/1000
-	                          : 0UL;
+	uint64_t timeout_ms = (tv != nullptr)
+  						  ? (uint64_t)tv->tv_sec*1000 + tv->tv_usec/1000
+						  : 0UL;
+	if (tv != nullptr && tv->tv_usec > 0 && timeout_ms == 0) {
+		warning(__FUNCTION__, "timeout is less 1 ms, reset to 1 ms");
+		timeout_ms = 1UL;
+	}
+
 	{
 		struct Missing_call_of_init_select : Exception { };
 		if (!_monitor_ptr || !_signal_ptr)
