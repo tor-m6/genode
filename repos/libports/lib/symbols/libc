@@ -5,6 +5,8 @@
 #
 # libc
 #
+alloc_secondary_stack T
+free_secondary_stack T
 ___mb_cur_max D 50
 ___runetype T
 ___tolower T

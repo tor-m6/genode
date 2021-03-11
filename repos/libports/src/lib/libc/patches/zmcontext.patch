@@ -1,0 +1,3716 @@
+diff -Naur include/libc/symbol-hacks.h include.my/libc/symbol-hacks.h
+--- include/libc/symbol-hacks.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/libc/symbol-hacks.h	2021-03-10 17:56:55.433894841 +0300
+@@ -0,0 +1,1 @@
++
+diff -Naur include/libc/config.h include.my/libc/config.h
+--- include/libc/config.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/libc/config.h	2021-03-10 17:56:55.433894841 +0300
+@@ -0,0 +1,1 @@
++
+diff -Naur include/libc/sys/_ucontext.h include.my/libc/sys/_ucontext.h
+--- include/libc/sys/_ucontext.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/libc/sys/_ucontext.h	2021-03-10 17:56:55.433894841 +0300
+@@ -0,0 +1,1 @@
++
+diff -Naur include/spec/x86_64/libc/machine/ucontext.h include.my/spec/x86_64/libc/machine/ucontext.h
+--- include/spec/x86_64/libc/machine/ucontext.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/spec/x86_64/libc/machine/ucontext.h	2021-03-10 17:56:55.433894841 +0300
+@@ -0,0 +1,7 @@
++/*-
++ * This file is in the public domain.
++ */
++/* $FreeBSD: releng/12.0/sys/amd64/include/ucontext.h 247047 2013-02-20 17:39:52Z kib $ */
++
++#include <x86/ucontext.h>
++
+diff -Naur include/libc/features.h include.my/libc/features.h
+--- include/libc/features.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/libc/features.h	2021-03-10 17:56:55.433894841 +0300
+@@ -0,0 +1,7 @@
++#ifndef _FEATURES_H
++#define _FEATURES_H 1 
++
++#define __USE_MISC
++#define __USE_GNU
++
++#endif /* features.h  */
+\ No newline at end of file
+diff -Naur include/libc/libc-symbols.h include.my/libc/libc-symbols.h
+--- include/libc/libc-symbols.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/libc/libc-symbols.h	2021-03-11 00:01:24.873184232 +0300
+@@ -0,0 +1,1092 @@
++/* Support macros for making weak and strong aliases for symbols,
++   and for using symbol sets and linker warnings with GNU ld.
++   Copyright (C) 1995-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef _LIBC_SYMBOLS_H
++#define _LIBC_SYMBOLS_H	1
++
++/* This file is included implicitly in the compilation of every source file,
++   using -include.  It includes config.h.  */
++
++/* Enable declarations of GNU extensions, since we are compiling them.  */
++#define _GNU_SOURCE 1
++
++#ifdef MODULE_NAME
++
++/* Use `#if IS_IN (module)` to detect what component is being compiled.  */
++#define PASTE_NAME1(a,b) a##b
++#define PASTE_NAME(a,b)	 PASTE_NAME1 (a,b)
++#define IN_MODULE	 PASTE_NAME (MODULE_, MODULE_NAME)
++#define IS_IN(lib)	 (IN_MODULE == MODULE_##lib)
++
++/* True if the current module is a versioned library.  Versioned
++   library names culled from shlib-versions files are assigned a
++   MODULE_* value greater than MODULE_LIBS_BEGIN.  */
++#define IS_IN_LIB	 (IN_MODULE > MODULE_LIBS_BEGIN)
++
++/* The testsuite, and some other ancillary code, should be compiled against
++   as close an approximation to the installed headers as possible.
++   Defining this symbol disables most internal-use-only declarations
++   provided by this header, and all those provided by other internal
++   wrapper headers.  */
++#if IS_IN (testsuite) || defined IS_IN_build || defined __cplusplus
++# define _ISOMAC 1
++#endif
++
++#else
++/* The generation process for a few files created very early in the
++   build (notably libc-modules.h itself) involves preprocessing this
++   header without defining MODULE_NAME.  Under these conditions,
++   internal declarations (especially from config.h) must be visible,
++   but IS_IN should always evaluate as false.  */
++# define IS_IN(lib) 0
++# define IS_IN_LIB 0
++# define IN_MODULE (-1)
++#endif
++
++#ifndef _ISOMAC
++
++/* This is defined for the compilation of all C library code.  features.h
++   tests this to avoid inclusion of stubs.h while compiling the library,
++   before stubs.h has been generated.  Some library code that is shared
++   with other packages also tests this symbol to see if it is being
++   compiled as part of the C library.  We must define this before including
++   config.h, because it makes some definitions conditional on whether libc
++   itself is being compiled, or just some generator program.  */
++#define _LIBC	1
++
++/* Some files must be compiled with optimization on.  */
++#if !defined __ASSEMBLER__ && !defined __OPTIMIZE__
++# error "glibc cannot be compiled without optimization"
++#endif
++
++/* -ffast-math cannot be applied to the C library, as it alters the ABI.
++   Some test components that use -ffast-math are currently not part of
++   IS_IN (testsuite) for technical reasons, so we have a secondary override.  */
++#if defined __FAST_MATH__ && !defined TEST_FAST_MATH
++# error "glibc must not be compiled with -ffast-math"
++#endif
++
++#include <config.h>
++
++/* When PIC is defined and SHARED isn't defined, we are building PIE
++   by default.  */
++#if defined PIC && !defined SHARED
++# define BUILD_PIE_DEFAULT 1
++#else
++# define BUILD_PIE_DEFAULT 0
++#endif
++
++/* Define this for the benefit of portable GNU code that wants to check it.
++   Code that checks with #if will not #include <config.h> again, since we've
++   already done it (and this file is implicitly included in every compile,
++   via -include).  Code that checks with #ifdef will #include <config.h>,
++   but that file should always be idempotent (i.e., it's just #define/#undef
++   and nothing else anywhere should be changing the macro state it touches),
++   so it's harmless.  */
++#define HAVE_CONFIG_H	0
++
++/* Define these macros for the benefit of portable GNU code that wants to check
++   them.  Of course, STDC_HEADERS is never false when building libc!  */
++#define STDC_HEADERS	1
++#define HAVE_MBSTATE_T	1
++#define HAVE_MBSRTOWCS	1
++#define HAVE_LIBINTL_H	1
++#define HAVE_WCTYPE_H	1
++#define HAVE_ISWCTYPE	1
++#define ENABLE_NLS	1
++
++/* The symbols in all the user (non-_) macros are C symbols.  */
++
++#ifndef __SYMBOL_PREFIX
++# define __SYMBOL_PREFIX
++#endif
++
++#ifndef C_SYMBOL_NAME
++# define C_SYMBOL_NAME(name) name
++#endif
++
++#ifndef ASM_LINE_SEP
++# define ASM_LINE_SEP ;
++#endif
++
++#ifndef __attribute_copy__
++/* Provide an empty definition when cdefs.h is not included.  */
++# define __attribute_copy__(arg)
++#endif
++
++#ifndef __ASSEMBLER__
++/* GCC understands weak symbols and aliases; use its interface where
++   possible, instead of embedded assembly language.  */
++
++/* Define ALIASNAME as a strong alias for NAME.  */
++# define strong_alias(name, aliasname) _strong_alias(name, aliasname)
++# define _strong_alias(name, aliasname) \
++  extern __typeof (name) aliasname __attribute__ ((alias (#name))) \
++    __attribute_copy__ (name);
++
++/* This comes between the return type and function name in
++   a function definition to make that definition weak.  */
++# define weak_function __attribute__ ((weak))
++# define weak_const_function __attribute__ ((weak, __const__))
++
++/* Define ALIASNAME as a weak alias for NAME.
++   If weak aliases are not available, this defines a strong alias.  */
++# define weak_alias(name, aliasname) _weak_alias (name, aliasname)
++# define _weak_alias(name, aliasname) \
++  extern __typeof (name) aliasname __attribute__ ((weak, alias (#name))) \
++    __attribute_copy__ (name);
++
++/* Same as WEAK_ALIAS, but mark symbol as hidden.  */
++# define weak_hidden_alias(name, aliasname) \
++  _weak_hidden_alias (name, aliasname)
++# define _weak_hidden_alias(name, aliasname) \
++  extern __typeof (name) aliasname \
++    __attribute__ ((weak, alias (#name), __visibility__ ("hidden"))) \
++    __attribute_copy__ (name);
++
++/* Declare SYMBOL as weak undefined symbol (resolved to 0 if not defined).  */
++# define weak_extern(symbol) _weak_extern (weak symbol)
++# define _weak_extern(expr) _Pragma (#expr)
++
++/* In shared builds, the expression call_function_static_weak
++   (FUNCTION-SYMBOL, ARGUMENTS) invokes FUNCTION-SYMBOL (an
++   identifier) unconditionally, with the (potentially empty) argument
++   list ARGUMENTS.  In static builds, if FUNCTION-SYMBOL has a
++   definition, the function is invoked as before; if FUNCTION-SYMBOL
++   is NULL, no call is performed.  */
++# ifdef SHARED
++#  define call_function_static_weak(func, ...) func (__VA_ARGS__)
++# else	/* !SHARED */
++#  define call_function_static_weak(func, ...)		\
++  ({							\
++    extern __typeof__ (func) func weak_function;	\
++    (func != NULL ? func (__VA_ARGS__) : (void)0);	\
++  })
++# endif
++
++#else /* __ASSEMBLER__ */
++
++# ifdef HAVE_ASM_SET_DIRECTIVE
++#  define strong_alias(original, alias)				\
++  .globl C_SYMBOL_NAME (alias) ASM_LINE_SEP		\
++  .set C_SYMBOL_NAME (alias),C_SYMBOL_NAME (original)
++#  define strong_data_alias(original, alias) strong_alias(original, alias)
++# else
++#  define strong_alias(original, alias)				\
++  .globl C_SYMBOL_NAME (alias) ASM_LINE_SEP		\
++  C_SYMBOL_NAME (alias) = C_SYMBOL_NAME (original)
++#  define strong_data_alias(original, alias) strong_alias(original, alias)
++# endif
++
++# define weak_alias(original, alias)					\
++  .weak C_SYMBOL_NAME (alias) ASM_LINE_SEP				\
++  C_SYMBOL_NAME (alias) = C_SYMBOL_NAME (original)
++
++# define weak_extern(symbol)						\
++  .weak C_SYMBOL_NAME (symbol)
++
++#endif /* __ASSEMBLER__ */
++
++/* Determine the return address.  */
++#define RETURN_ADDRESS(nr) \
++  __builtin_extract_return_addr (__builtin_return_address (nr))
++
++/* When a reference to SYMBOL is encountered, the linker will emit a
++   warning message MSG.  */
++/* We want the .gnu.warning.SYMBOL section to be unallocated.  */
++#define __make_section_unallocated(section_string)	\
++  asm (".section " section_string "\n\t.previous");
++
++/* Tacking on "\n\t#" to the section name makes gcc put it's bogus
++   section attributes on what looks like a comment to the assembler.  */
++#ifdef HAVE_SECTION_QUOTES
++# define __sec_comment "\"\n\t#\""
++#else
++# define __sec_comment "\n\t#"
++#endif
++#define link_warning(symbol, msg) \
++  __make_section_unallocated (".gnu.warning." #symbol) \
++  static const char __evoke_link_warning_##symbol[]	\
++    __attribute__ ((used, section (".gnu.warning." #symbol __sec_comment))) \
++    = msg;
++
++/* A canned warning for sysdeps/stub functions.  */
++#define	stub_warning(name) \
++  __make_section_unallocated (".gnu.glibc-stub." #name) \
++  link_warning (name, #name " is not implemented and will always fail")
++
++/* Warning for linking functions calling dlopen into static binaries.  */
++#ifdef SHARED
++#define static_link_warning(name)
++#else
++#define static_link_warning(name) static_link_warning1(name)
++#define static_link_warning1(name) \
++  link_warning(name, "Using '" #name "' in statically linked applications \
++requires at runtime the shared libraries from the glibc version used \
++for linking")
++#endif
++
++/* Resource Freeing Hooks:
++
++   Normally a process exits and the OS cleans up any allocated
++   memory.  However, when tooling like mtrace or valgrind is monitoring
++   the process we need to free all resources that are part of the
++   process in order to provide the consistency required to track
++   memory leaks.
++
++   A single public API exists and is __libc_freeres(), and this is used
++   by applications like valgrind to freee resouces.
++
++   There are 3 cases:
++
++   (a) __libc_freeres
++
++	In this case all you need to do is define the freeing routine:
++
++	foo.c:
++	libfoo_freeres_fn (foo_freeres)
++	{
++	  complex_free (mem);
++	}
++
++	This ensures the function is called at the right point to free
++	resources.
++
++   (b) __libc_freeres_ptr
++
++	The framework for (a) iterates over the list of pointers-to-free
++	in (b) and frees them.
++
++	foo.c:
++	libc_freeres_ptr (static char *foo_buffer);
++
++	Freeing these resources alaways happens last and is equivalent
++	to registering a function that does 'free (foo_buffer)'.
++
++   (c) Explicit lists of free routines to call or objects to free.
++
++	It is the intended goal to remove (a) and (b) which have some
++	non-determinism based on link order, and instead use explicit
++	lists of functions and frees to resolve cleanup ordering issues
++	and make it easy to debug and maintain.
++
++	As of today the following subsystems use (c):
++
++	Per-thread cleanup:
++	* malloc/thread-freeres.c
++
++	libdl cleanup:
++	* dlfcn/dlfreeres.c
++
++	libpthread cleanup:
++	* nptl/nptlfreeres.c
++
++	So if you need any shutdown routines to run you should add them
++	directly to the appropriate subsystem's shutdown list.  */
++
++/* Resource pointers to free in libc.so.  */
++#define libc_freeres_ptr(decl) \
++  __make_section_unallocated ("__libc_freeres_ptrs, \"aw\", %nobits") \
++  decl __attribute__ ((section ("__libc_freeres_ptrs" __sec_comment)))
++
++/* Resource freeing functions from libc.so go in this section.  */
++#define __libc_freeres_fn_section \
++  __attribute__ ((__used__, section ("__libc_freeres_fn")))
++
++/* Resource freeing functions for libc.so.  */
++#define libc_freeres_fn(name) \
++  static void name (void) __attribute_used__ __libc_freeres_fn_section;	\
++  text_set_element (__libc_subfreeres, name);				\
++  static void name (void)
++
++/* Declare SYMBOL to be TYPE (`function' or `object') of SIZE bytes
++   alias to ORIGINAL, when the assembler supports such declarations
++   (such as in ELF).
++   This is only necessary when defining something in assembly, or playing
++   funny alias games where the size should be other than what the compiler
++   thinks it is.  */
++#define declare_symbol_alias(symbol, original, type, size) \
++  declare_symbol_alias_1 (symbol, original, type, size)
++#ifdef __ASSEMBLER__
++# define declare_symbol_alias_1(symbol, original, type, size) \
++   strong_alias (original, symbol); \
++   .type C_SYMBOL_NAME (symbol), %##type; \
++   .size C_SYMBOL_NAME (symbol), size
++#else /* Not __ASSEMBLER__.  */
++# define declare_symbol_alias_1(symbol, original, type, size) \
++   asm (".globl " __SYMBOL_PREFIX #symbol \
++	"\n\t" declare_symbol_alias_1_alias (symbol, original) \
++	"\n\t.type " __SYMBOL_PREFIX #symbol ", " \
++	"%" #type \
++	"\n\t.size " __SYMBOL_PREFIX #symbol ", " #size);
++# ifdef HAVE_ASM_SET_DIRECTIVE
++#  define declare_symbol_alias_1_alias(symbol, original) \
++     ".set " __SYMBOL_PREFIX #symbol ", " __SYMBOL_PREFIX #original
++# else
++#  define declare_symbol_alias_1_alias(symbol, original) \
++     __SYMBOL_PREFIX #symbol " = " __SYMBOL_PREFIX #original
++# endif /* HAVE_ASM_SET_DIRECTIVE */
++#endif /* __ASSEMBLER__ */
++
++
++/*
++
++*/
++
++/* Symbol set support macros.  */
++
++/* Make SYMBOL, which is in the text segment, an element of SET.  */
++#define text_set_element(set, symbol)	_elf_set_element(set, symbol)
++/* Make SYMBOL, which is in the data segment, an element of SET.  */
++#define data_set_element(set, symbol)	_elf_set_element(set, symbol)
++/* Make SYMBOL, which is in the bss segment, an element of SET.  */
++#define bss_set_element(set, symbol)	_elf_set_element(set, symbol)
++
++/* These are all done the same way in ELF.
++   There is a new section created for each set.  */
++#ifdef SHARED
++/* When building a shared library, make the set section writable,
++   because it will need to be relocated at run time anyway.  */
++# define _elf_set_element(set, symbol) \
++  static const void *__elf_set_##set##_element_##symbol##__ \
++    __attribute__ ((used, section (#set))) = &(symbol)
++#else
++# define _elf_set_element(set, symbol) \
++  static const void *const __elf_set_##set##_element_##symbol##__ \
++    __attribute__ ((used, section (#set))) = &(symbol)
++#endif
++
++/* Define SET as a symbol set.  This may be required (it is in a.out) to
++   be able to use the set's contents.  */
++#define symbol_set_define(set)	symbol_set_declare(set)
++
++/* Declare SET for use in this module, if defined in another module.
++   In a shared library, this is always local to that shared object.
++   For static linking, the set might be wholly absent and so we use
++   weak references.  */
++#define symbol_set_declare(set) \
++  extern char const __start_##set[] __symbol_set_attribute; \
++  extern char const __stop_##set[] __symbol_set_attribute;
++#ifdef SHARED
++# define __symbol_set_attribute attribute_hidden
++#else
++# define __symbol_set_attribute __attribute__ ((weak))
++#endif
++
++/* Return a pointer (void *const *) to the first element of SET.  */
++#define symbol_set_first_element(set)	((void *const *) (&__start_##set))
++
++/* Return true iff PTR (a void *const *) has been incremented
++   past the last element in SET.  */
++#define symbol_set_end_p(set, ptr) ((ptr) >= (void *const *) &__stop_##set)
++
++/* Use symbol_version_reference to specify the version a symbol
++   reference should link to.  Use symbol_version or
++   default_symbol_version for the definition of a versioned symbol.
++   The difference is that the latter is a no-op in non-shared
++   builds.  */
++#ifdef __ASSEMBLER__
++# define symbol_version_reference(real, name, version) \
++     .symver real, name##@##version
++#else  /* !__ASSEMBLER__ */
++# define symbol_version_reference(real, name, version) \
++  __asm__ (".symver " #real "," #name "@" #version)
++#endif
++
++#ifdef SHARED
++# define symbol_version(real, name, version) \
++  symbol_version_reference(real, name, version)
++# define default_symbol_version(real, name, version) \
++     _default_symbol_version(real, name, version)
++# ifdef __ASSEMBLER__
++#  define _default_symbol_version(real, name, version) \
++     .symver real, name##@##@##version
++# else
++#  define _default_symbol_version(real, name, version) \
++     __asm__ (".symver " #real "," #name "@@" #version)
++# endif
++
++/* Evalutes to a string literal for VERSION in LIB.  */
++# define symbol_version_string(lib, version) \
++  _symbol_version_stringify_1 (VERSION_##lib##_##version)
++# define _symbol_version_stringify_1(arg) _symbol_version_stringify_2 (arg)
++# define _symbol_version_stringify_2(arg) #arg
++
++#else /* !SHARED */
++# define symbol_version(real, name, version)
++# define default_symbol_version(real, name, version) \
++  strong_alias(real, name)
++#endif
++
++#if defined SHARED || defined LIBC_NONSHARED \
++  || (BUILD_PIE_DEFAULT && IS_IN (libc))
++# define attribute_hidden __attribute__ ((visibility ("hidden")))
++#else
++# define attribute_hidden
++#endif
++
++#define attribute_tls_model_ie __attribute__ ((tls_model ("initial-exec")))
++
++#define attribute_relro __attribute__ ((section (".data.rel.ro")))
++
++
++/* Used to disable stack protection in sensitive places, like ifunc
++   resolvers and early static TLS init.  */
++#ifdef HAVE_CC_NO_STACK_PROTECTOR
++# define inhibit_stack_protector \
++    __attribute__ ((__optimize__ ("-fno-stack-protector")))
++#else
++# define inhibit_stack_protector
++#endif
++
++/* The following macros are used for PLT bypassing within libc.so
++   (and if needed other libraries similarly).
++   First of all, you need to have the function prototyped somewhere,
++   say in foo/foo.h:
++
++   int foo (int __bar);
++
++   If calls to foo within libc.so should always go to foo defined in libc.so,
++   then in include/foo.h you add:
++
++   libc_hidden_proto (foo)
++
++   line and after the foo function definition:
++
++   int foo (int __bar)
++   {
++     return __bar;
++   }
++   libc_hidden_def (foo)
++
++   or
++
++   int foo (int __bar)
++   {
++     return __bar;
++   }
++   libc_hidden_weak (foo)
++
++   Similarly for global data.  If references to foo within libc.so should
++   always go to foo defined in libc.so, then in include/foo.h you add:
++
++   libc_hidden_proto (foo)
++
++   line and after foo's definition:
++
++   int foo = INITIAL_FOO_VALUE;
++   libc_hidden_data_def (foo)
++
++   or
++
++   int foo = INITIAL_FOO_VALUE;
++   libc_hidden_data_weak (foo)
++
++   If foo is normally just an alias (strong or weak) to some other function,
++   you should use the normal strong_alias first, then add libc_hidden_def
++   or libc_hidden_weak:
++
++   int baz (int __bar)
++   {
++     return __bar;
++   }
++   strong_alias (baz, foo)
++   libc_hidden_weak (foo)
++
++   If the function should be internal to multiple objects, say ld.so and
++   libc.so, the best way is to use:
++
++   #if IS_IN (libc) || IS_IN (rtld)
++   hidden_proto (foo)
++   #endif
++
++   in include/foo.h and the normal macros at all function definitions
++   depending on what DSO they belong to.
++
++   If versioned_symbol macro is used to define foo,
++   libc_hidden_ver macro should be used, as in:
++
++   int __real_foo (int __bar)
++   {
++     return __bar;
++   }
++   versioned_symbol (libc, __real_foo, foo, GLIBC_2_1);
++   libc_hidden_ver (__real_foo, foo)  */
++
++#if defined SHARED && !defined NO_HIDDEN
++# ifndef __ASSEMBLER__
++#  define __hidden_proto_hiddenattr(attrs...) \
++  __attribute__ ((visibility ("hidden"), ##attrs))
++#  define hidden_proto(name, attrs...) \
++  __hidden_proto (name, , __GI_##name, ##attrs)
++#  define hidden_tls_proto(name, attrs...) \
++  __hidden_proto (name, __thread, __GI_##name, ##attrs)
++#  define __hidden_proto(name, thread, internal, attrs...)	     \
++  extern thread __typeof (name) name __asm__ (__hidden_asmname (#internal)) \
++  __hidden_proto_hiddenattr (attrs);
++#  define __hidden_asmname(name) \
++  __hidden_asmname1 (__USER_LABEL_PREFIX__, name)
++#  define __hidden_asmname1(prefix, name) __hidden_asmname2(prefix, name)
++#  define __hidden_asmname2(prefix, name) #prefix name
++#  define __hidden_ver1(local, internal, name) \
++  __hidden_ver2 (, local, internal, name)
++#  define __hidden_ver2(thread, local, internal, name)			\
++  extern thread __typeof (name) __EI_##name \
++    __asm__(__hidden_asmname (#internal));  \
++  extern thread __typeof (name) __EI_##name \
++    __attribute__((alias (__hidden_asmname (#local))))	\
++    __attribute_copy__ (name)
++#  define hidden_ver(local, name)	__hidden_ver1(local, __GI_##name, name);
++#  define hidden_data_ver(local, name)	hidden_ver(local, name)
++#  define hidden_def(name)		__hidden_ver1(__GI_##name, name, name);
++#  define hidden_data_def(name)		hidden_def(name)
++#  define hidden_tls_def(name)				\
++  __hidden_ver2 (__thread, __GI_##name, name, name);
++#  define hidden_weak(name) \
++	__hidden_ver1(__GI_##name, name, name) __attribute__((weak));
++#  define hidden_data_weak(name)	hidden_weak(name)
++#  define hidden_nolink(name, lib, version) \
++  __hidden_nolink1 (__GI_##name, __EI_##name, name, VERSION_##lib##_##version)
++#  define __hidden_nolink1(local, internal, name, version) \
++  __hidden_nolink2 (local, internal, name, version)
++#  define __hidden_nolink2(local, internal, name, version) \
++  extern __typeof (name) internal __attribute__ ((alias (#local)))	\
++    __attribute_copy__ (name);						\
++  __hidden_nolink3 (local, internal, #name "@" #version)
++#  define __hidden_nolink3(local, internal, vername) \
++  __asm__ (".symver " #internal ", " vername);
++# else
++/* For assembly, we need to do the opposite of what we do in C:
++   in assembly gcc __REDIRECT stuff is not in place, so functions
++   are defined by its normal name and we need to create the
++   __GI_* alias to it, in C __REDIRECT causes the function definition
++   to use __GI_* name and we need to add alias to the real name.
++   There is no reason to use hidden_weak over hidden_def in assembly,
++   but we provide it for consistency with the C usage.
++   hidden_proto doesn't make sense for assembly but the equivalent
++   is to call via the HIDDEN_JUMPTARGET macro instead of JUMPTARGET.  */
++#  define hidden_def(name)	strong_alias (name, __GI_##name)
++#  define hidden_weak(name)	hidden_def (name)
++#  define hidden_ver(local, name) strong_alias (local, __GI_##name)
++#  define hidden_data_def(name)	strong_data_alias (name, __GI_##name)
++#  define hidden_tls_def(name)	hidden_data_def (name)
++#  define hidden_data_weak(name)	hidden_data_def (name)
++#  define hidden_data_ver(local, name) strong_data_alias (local, __GI_##name)
++#  define HIDDEN_JUMPTARGET(name) __GI_##name
++# endif
++#else
++# ifndef __ASSEMBLER__
++#  if !defined SHARED && IS_IN (libc) && !defined LIBC_NONSHARED \
++      && (!defined PIC || !defined NO_HIDDEN_EXTERN_FUNC_IN_PIE) \
++      && !defined NO_HIDDEN
++#   define __hidden_proto_hiddenattr(attrs...) \
++  __attribute__ ((visibility ("hidden"), ##attrs))
++#   define hidden_proto(name, attrs...) \
++  __hidden_proto (name, , name, ##attrs)
++#   define hidden_tls_proto(name, attrs...) \
++  __hidden_proto (name, __thread, name, ##attrs)
++#  define __hidden_proto(name, thread, internal, attrs...)	     \
++  extern thread __typeof (name) name __hidden_proto_hiddenattr (attrs);
++# else
++#   define hidden_proto(name, attrs...)
++#   define hidden_tls_proto(name, attrs...)
++# endif
++# else
++#  define HIDDEN_JUMPTARGET(name) JUMPTARGET(name)
++# endif /* Not  __ASSEMBLER__ */
++# define hidden_weak(name)
++# define hidden_def(name)
++# define hidden_ver(local, name)
++# define hidden_data_weak(name)
++# define hidden_data_def(name)
++# define hidden_tls_def(name)
++# define hidden_data_ver(local, name)
++# define hidden_nolink(name, lib, version)
++#endif
++
++#if IS_IN (libc)
++# define libc_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libc_hidden_tls_proto(name, attrs...) hidden_tls_proto (name, ##attrs)
++# define libc_hidden_def(name) hidden_def (name)
++# define libc_hidden_weak(name) hidden_weak (name)
++# define libc_hidden_nolink_sunrpc(name, version) hidden_nolink (name, libc, version)
++# define libc_hidden_ver(local, name) hidden_ver (local, name)
++# define libc_hidden_data_def(name) hidden_data_def (name)
++# define libc_hidden_tls_def(name) hidden_tls_def (name)
++# define libc_hidden_data_weak(name) hidden_data_weak (name)
++# define libc_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libc_hidden_proto(name, attrs...)
++# define libc_hidden_tls_proto(name, attrs...)
++# define libc_hidden_def(name)
++# define libc_hidden_weak(name)
++# define libc_hidden_ver(local, name)
++# define libc_hidden_data_def(name)
++# define libc_hidden_tls_def(name)
++# define libc_hidden_data_weak(name)
++# define libc_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (rtld)
++# define rtld_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define rtld_hidden_tls_proto(name, attrs...) hidden_tls_proto (name, ##attrs)
++# define rtld_hidden_def(name) hidden_def (name)
++# define rtld_hidden_weak(name) hidden_weak (name)
++# define rtld_hidden_ver(local, name) hidden_ver (local, name)
++# define rtld_hidden_data_def(name) hidden_data_def (name)
++# define rtld_hidden_tls_def(name) hidden_tls_def (name)
++# define rtld_hidden_data_weak(name) hidden_data_weak (name)
++# define rtld_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define rtld_hidden_proto(name, attrs...)
++# define rtld_hidden_tls_proto(name, attrs...)
++# define rtld_hidden_def(name)
++# define rtld_hidden_weak(name)
++# define rtld_hidden_ver(local, name)
++# define rtld_hidden_data_def(name)
++# define rtld_hidden_tls_def(name)
++# define rtld_hidden_data_weak(name)
++# define rtld_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libm)
++# define libm_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libm_hidden_tls_proto(name, attrs...) hidden_tls_proto (name, ##attrs)
++# define libm_hidden_def(name) hidden_def (name)
++# define libm_hidden_weak(name) hidden_weak (name)
++# define libm_hidden_ver(local, name) hidden_ver (local, name)
++# define libm_hidden_data_def(name) hidden_data_def (name)
++# define libm_hidden_tls_def(name) hidden_tls_def (name)
++# define libm_hidden_data_weak(name) hidden_data_weak (name)
++# define libm_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libm_hidden_proto(name, attrs...)
++# define libm_hidden_tls_proto(name, attrs...)
++# define libm_hidden_def(name)
++# define libm_hidden_weak(name)
++# define libm_hidden_ver(local, name)
++# define libm_hidden_data_def(name)
++# define libm_hidden_tls_def(name)
++# define libm_hidden_data_weak(name)
++# define libm_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libmvec)
++# define libmvec_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libmvec_hidden_tls_proto(name, attrs...) hidden_tls_proto (name, ##attrs)
++# define libmvec_hidden_def(name) hidden_def (name)
++# define libmvec_hidden_weak(name) hidden_weak (name)
++# define libmvec_hidden_ver(local, name) hidden_ver (local, name)
++# define libmvec_hidden_data_def(name) hidden_data_def (name)
++# define libmvec_hidden_tls_def(name) hidden_tls_def (name)
++# define libmvec_hidden_data_weak(name) hidden_data_weak (name)
++# define libmvec_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libmvec_hidden_proto(name, attrs...)
++# define libmvec_hidden_tls_proto(name, attrs...)
++# define libmvec_hidden_def(name)
++# define libmvec_hidden_weak(name)
++# define libmvec_hidden_ver(local, name)
++# define libmvec_hidden_data_def(name)
++# define libmvec_hidden_tls_def(name)
++# define libmvec_hidden_data_weak(name)
++# define libmvec_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libresolv)
++# define libresolv_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libresolv_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libresolv_hidden_def(name) hidden_def (name)
++# define libresolv_hidden_weak(name) hidden_weak (name)
++# define libresolv_hidden_ver(local, name) hidden_ver (local, name)
++# define libresolv_hidden_data_def(name) hidden_data_def (name)
++# define libresolv_hidden_tls_def(name) hidden_tls_def (name)
++# define libresolv_hidden_data_weak(name) hidden_data_weak (name)
++# define libresolv_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libresolv_hidden_proto(name, attrs...)
++# define libresolv_hidden_tls_proto(name, attrs...)
++# define libresolv_hidden_def(name)
++# define libresolv_hidden_weak(name)
++# define libresolv_hidden_ver(local, name)
++# define libresolv_hidden_data_def(name)
++# define libresolv_hidden_tls_def(name)
++# define libresolv_hidden_data_weak(name)
++# define libresolv_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libpthread)
++# define libpthread_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libpthread_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libpthread_hidden_def(name) hidden_def (name)
++# define libpthread_hidden_weak(name) hidden_weak (name)
++# define libpthread_hidden_ver(local, name) hidden_ver (local, name)
++# define libpthread_hidden_data_def(name) hidden_data_def (name)
++# define libpthread_hidden_tls_def(name) hidden_tls_def (name)
++# define libpthread_hidden_data_weak(name) hidden_data_weak (name)
++# define libpthread_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libpthread_hidden_proto(name, attrs...)
++# define libpthread_hidden_tls_proto(name, attrs...)
++# define libpthread_hidden_def(name)
++# define libpthread_hidden_weak(name)
++# define libpthread_hidden_ver(local, name)
++# define libpthread_hidden_data_def(name)
++# define libpthread_hidden_tls_def(name)
++# define libpthread_hidden_data_weak(name)
++# define libpthread_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (librt)
++# define librt_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define librt_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define librt_hidden_def(name) hidden_def (name)
++# define librt_hidden_weak(name) hidden_weak (name)
++# define librt_hidden_ver(local, name) hidden_ver (local, name)
++# define librt_hidden_data_def(name) hidden_data_def (name)
++# define librt_hidden_tls_def(name) hidden_tls_def (name)
++# define librt_hidden_data_weak(name) hidden_data_weak (name)
++# define librt_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define librt_hidden_proto(name, attrs...)
++# define librt_hidden_tls_proto(name, attrs...)
++# define librt_hidden_def(name)
++# define librt_hidden_weak(name)
++# define librt_hidden_ver(local, name)
++# define librt_hidden_data_def(name)
++# define librt_hidden_tls_def(name)
++# define librt_hidden_data_weak(name)
++# define librt_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libdl)
++# define libdl_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libdl_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libdl_hidden_def(name) hidden_def (name)
++# define libdl_hidden_weak(name) hidden_weak (name)
++# define libdl_hidden_ver(local, name) hidden_ver (local, name)
++# define libdl_hidden_data_def(name) hidden_data_def (name)
++# define libdl_hidden_tls_def(name) hidden_tls_def (name)
++# define libdl_hidden_data_weak(name) hidden_data_weak (name)
++# define libdl_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libdl_hidden_proto(name, attrs...)
++# define libdl_hidden_tls_proto(name, attrs...)
++# define libdl_hidden_def(name)
++# define libdl_hidden_weak(name)
++# define libdl_hidden_ver(local, name)
++# define libdl_hidden_data_def(name)
++# define libdl_hidden_tls_def(name)
++# define libdl_hidden_data_weak(name)
++# define libdl_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libnss_files)
++# define libnss_files_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libnss_files_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libnss_files_hidden_def(name) hidden_def (name)
++# define libnss_files_hidden_weak(name) hidden_weak (name)
++# define libnss_files_hidden_ver(local, name) hidden_ver (local, name)
++# define libnss_files_hidden_data_def(name) hidden_data_def (name)
++# define libnss_files_hidden_tls_def(name) hidden_tls_def (name)
++# define libnss_files_hidden_data_weak(name) hidden_data_weak (name)
++# define libnss_files_hidden_data_ver(local, name) hidden_data_ver(local, name)
++#else
++# define libnss_files_hidden_proto(name, attrs...)
++# define libnss_files_hidden_tls_proto(name, attrs...)
++# define libnss_files_hidden_def(name)
++# define libnss_files_hidden_weak(name)
++# define libnss_files_hidden_ver(local, name)
++# define libnss_files_hidden_data_def(name)
++# define libnss_files_hidden_tls_def(name)
++# define libnss_files_hidden_data_weak(name)
++# define libnss_files_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libnsl)
++# define libnsl_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libnsl_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libnsl_hidden_nolink_def(name, version) hidden_nolink (name, libnsl, version)
++# define libnsl_hidden_weak(name) hidden_weak (name)
++# define libnsl_hidden_ver(local, name) hidden_ver (local, name)
++# define libnsl_hidden_data_def(name) hidden_data_def (name)
++# define libnsl_hidden_tls_def(name) hidden_tls_def (name)
++# define libnsl_hidden_data_weak(name) hidden_data_weak (name)
++# define libnsl_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libnsl_hidden_proto(name, attrs...)
++# define libnsl_hidden_tls_proto(name, attrs...)
++# define libnsl_hidden_weak(name)
++# define libnsl_hidden_ver(local, name)
++# define libnsl_hidden_data_def(name)
++# define libnsl_hidden_tls_def(name)
++# define libnsl_hidden_data_weak(name)
++# define libnsl_hidden_data_ver(local, name)
++#endif
++
++#define libc_hidden_builtin_proto(name, attrs...) libc_hidden_proto (name, ##attrs)
++#define libc_hidden_builtin_def(name) libc_hidden_def (name)
++#define libc_hidden_builtin_weak(name) libc_hidden_weak (name)
++#define libc_hidden_builtin_ver(local, name) libc_hidden_ver (local, name)
++
++#define libc_hidden_ldbl_proto(name, attrs...) libc_hidden_proto (name, ##attrs)
++#ifdef __ASSEMBLER__
++# define HIDDEN_BUILTIN_JUMPTARGET(name) HIDDEN_JUMPTARGET(name)
++#endif
++
++#if IS_IN (libutil)
++# define libutil_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libutil_hidden_tls_proto(name, attrs...) \
++  hidden_tls_proto (name, ##attrs)
++# define libutil_hidden_def(name) hidden_def (name)
++# define libutil_hidden_weak(name) hidden_weak (name)
++# define libutil_hidden_ver(local, name) hidden_ver (local, name)
++# define libutil_hidden_data_def(name) hidden_data_def (name)
++# define libutil_hidden_tls_def(name) hidden_tls_def (name)
++# define libutil_hidden_data_weak(name) hidden_data_weak (name)
++# define libutil_hidden_data_ver(local, name) hidden_data_ver (local, name)
++#else
++# define libutil_hidden_proto(name, attrs...)
++# define libutil_hidden_tls_proto(name, attrs...)
++# define libutil_hidden_def(name)
++# define libutil_hidden_weak(name)
++# define libutil_hidden_ver(local, name)
++# define libutil_hidden_data_def(name)
++# define libutil_hidden_tls_def(name)
++# define libutil_hidden_data_weak(name)
++# define libutil_hidden_data_ver(local, name)
++#endif
++
++#if IS_IN (libanl)
++# define libanl_hidden_proto(name, attrs...) hidden_proto (name, ##attrs)
++# define libanl_hidden_def(name) hidden_def (name)
++#else
++# define libanl_hidden_proto(name, attrs...)
++# define libanl_hidden_def(name)
++#endif
++
++/* Get some dirty hacks.  */
++#include <symbol-hacks.h>
++
++/* Move compatibility symbols out of the way by placing them all in a
++   special section.  */
++#ifndef __ASSEMBLER__
++# define attribute_compat_text_section \
++    __attribute__ ((section (".text.compat")))
++# define attribute_compat_data_section \
++    __attribute__ ((section (".data.compat")))
++#else
++# define compat_text_section .section ".text.compat", "ax";
++# define compat_data_section .section ".data.compat", "aw";
++#endif
++
++/* Helper / base  macros for indirect function symbols.  */
++#define __ifunc_resolver(type_name, name, expr, arg, init, classifier)	\
++  classifier inhibit_stack_protector					\
++  __typeof (type_name) *name##_ifunc (arg)				\
++  {									\
++    init ();								\
++    __typeof (type_name) *res = expr;					\
++    return res;								\
++  }
++
++#ifdef HAVE_GCC_IFUNC
++# define __ifunc(type_name, name, expr, arg, init)			\
++  extern __typeof (type_name) name __attribute__			\
++			      ((ifunc (#name "_ifunc")));		\
++  __ifunc_resolver (type_name, name, expr, arg, init, static)
++
++# define __ifunc_hidden(type_name, name, expr, arg, init)	\
++  __ifunc (type_name, name, expr, arg, init)
++#else
++/* Gcc does not support __attribute__ ((ifunc (...))).  Use the old behaviour
++   as fallback.  But keep in mind that the debug information for the ifunc
++   resolver functions is not correct.  It contains the ifunc'ed function as
++   DW_AT_linkage_name.  E.g. lldb uses this field and an inferior function
++   call of the ifunc'ed function will fail due to "no matching function for
++   call to ..." because the ifunc'ed function and the resolver function have
++   different signatures.  (Gcc support is disabled at least on a ppc64le
++   Ubuntu 14.04 system.)  */
++
++# define __ifunc(type_name, name, expr, arg, init)			\
++  extern __typeof (type_name) name;					\
++  __typeof (type_name) *name##_ifunc (arg) __asm__ (#name);		\
++  __ifunc_resolver (type_name, name, expr, arg, init,)			\
++ __asm__ (".type " #name ", %gnu_indirect_function");
++
++# define __ifunc_hidden(type_name, name, expr, arg, init)		\
++  extern __typeof (type_name) __libc_##name;				\
++  __ifunc (type_name, __libc_##name, expr, arg, init)			\
++  strong_alias (__libc_##name, name);
++#endif /* !HAVE_GCC_IFUNC  */
++
++/* The following macros are used for indirect function symbols in libc.so.
++   First of all, you need to have the function prototyped somewhere,
++   say in foo.h:
++
++   int foo (int __bar);
++
++   If you have an implementation for foo which e.g. uses a special hardware
++   feature which isn't available on all machines where this libc.so will be
++   used but decideable if available at runtime e.g. via hwcaps, you can provide
++   two or multiple implementations of foo:
++
++   int __foo_default (int __bar)
++   {
++     return __bar;
++   }
++
++   int __foo_special (int __bar)
++   {
++     return __bar;
++   }
++
++   If your function foo has no libc_hidden_proto (foo) defined for PLT
++   bypassing, you can use:
++
++   #define INIT_ARCH() unsigned long int hwcap = __GLRO(dl_hwcap);
++
++   libc_ifunc (foo, (hwcap & HWCAP_SPECIAL) ? __foo_special : __foo_default);
++
++   This will define a resolver function for foo which returns __foo_special or
++   __foo_default depending on your specified expression.  Please note that you
++   have to define a macro function INIT_ARCH before using libc_ifunc macro as
++   it is called by the resolver function before evaluating the specified
++   expression.  In this example it is used to prepare the hwcap variable.
++   The resolver function is assigned to an ifunc'ed symbol foo.  Calls to foo
++   from inside or outside of libc.so will be indirected by a PLT call.
++
++   If your function foo has a libc_hidden_proto (foo) defined for PLT bypassing
++   and calls to foo within libc.so should always go to one specific
++   implementation of foo e.g. __foo_default then you have to add:
++
++   __hidden_ver1 (__foo_default, __GI_foo, __foo_default);
++
++   or a tweaked definition of libc_hidden_def macro after the __foo_default
++   function definition.  Calls to foo within libc.so will always go directly to
++   __foo_default.  Calls to foo from outside libc.so will be indirected by a
++   PLT call to ifunc'ed symbol foo which you have to define in a separate
++   compile unit:
++
++   #define foo __redirect_foo
++   #include <foo.h>
++   #undef foo
++
++   extern __typeof (__redirect_foo) __foo_default attribute_hidden;
++   extern __typeof (__redirect_foo) __foo_special attribute_hidden;
++
++   libc_ifunc_redirected (__redirect_foo, foo,
++			  (hwcap & HWCAP_SPECIAL)
++			  ? __foo_special
++			  : __foo_default);
++
++   This will define the ifunc'ed symbol foo like above.  The redirection of foo
++   in header file is needed to omit an additional defintion of __GI_foo which
++   would end in a linker error while linking libc.so.  You have to specify
++   __redirect_foo as first parameter which is used within libc_ifunc_redirected
++   macro in conjunction with typeof to define the ifunc'ed symbol foo.
++
++   If your function foo has a libc_hidden_proto (foo) defined and calls to foo
++   within or from outside libc.so should go via ifunc'ed symbol, then you have
++   to use:
++
++   libc_ifunc_hidden (foo, foo,
++		      (hwcap & HWCAP_SPECIAL)
++		      ? __foo_special
++		      : __foo_default);
++   libc_hidden_def (foo)
++
++   The first parameter foo of libc_ifunc_hidden macro is used in the same way
++   as for libc_ifunc_redirected macro.  */
++
++#define libc_ifunc(name, expr) __ifunc (name, name, expr, void, INIT_ARCH)
++
++#define libc_ifunc_redirected(redirected_name, name, expr)	\
++  __ifunc (redirected_name, name, expr, void, INIT_ARCH)
++
++#define libc_ifunc_hidden(redirected_name, name, expr)			\
++  __ifunc_hidden (redirected_name, name, expr, void, INIT_ARCH)
++
++/* The body of the function is supposed to use __get_cpu_features
++   which will, if necessary, initialize the data first.  */
++#define libm_ifunc_init()
++#define libm_ifunc(name, expr)				\
++  __ifunc (name, name, expr, void, libm_ifunc_init)
++
++/* Add the compiler optimization to inhibit loop transformation to library
++   calls.  This is used to avoid recursive calls in memset and memmove
++   default implementations.  */
++#ifdef HAVE_CC_INHIBIT_LOOP_TO_LIBCALL
++# define inhibit_loop_to_libcall \
++    __attribute__ ((__optimize__ ("-fno-tree-loop-distribute-patterns")))
++#else
++# define inhibit_loop_to_libcall
++#endif
++
++/* These macros facilitate sharing source files with gnulib.
++
++   They are here instead of sys/cdefs.h because they should not be
++   used in public header files.
++
++   Their definitions should be kept consistent with the definitions in
++   gnulib-common.m4, but it is not necessary to cater to old non-GCC
++   compilers, since they will only be used while building glibc itself.
++   (Note that _GNUC_PREREQ cannot be used in this file.)  */
++
++/* Define as a marker that can be attached to declarations that might not
++    be used.  This helps to reduce warnings, such as from
++    GCC -Wunused-parameter.  */
++#if __GNUC__ >= 3 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)
++# define _GL_UNUSED __attribute__ ((__unused__))
++#else
++# define _GL_UNUSED
++#endif
++
++/* gcc supports the "unused" attribute on possibly unused labels, and
++   g++ has since version 4.5.  Note to support C++ as well as C,
++   _GL_UNUSED_LABEL should be used with a trailing ;  */
++#if !defined __cplusplus || __GNUC__ > 4 \
++    || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
++# define _GL_UNUSED_LABEL _GL_UNUSED
++#else
++# define _GL_UNUSED_LABEL
++#endif
++
++/* The __pure__ attribute was added in gcc 2.96.  */
++#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 96)
++# define _GL_ATTRIBUTE_PURE __attribute__ ((__pure__))
++#else
++# define _GL_ATTRIBUTE_PURE /* empty */
++#endif
++
++/* The __const__ attribute was added in gcc 2.95.  */
++#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95)
++# define _GL_ATTRIBUTE_CONST __attribute__ ((__const__))
++#else
++# define _GL_ATTRIBUTE_CONST /* empty */
++#endif
++
++#endif /* !_ISOMAC */
++#endif /* libc-symbols.h */
+diff -Naur include/libc/sys/ucontext.h include.my/libc/sys/ucontext.h
+--- include/libc/sys/ucontext.h	2021-03-11 18:47:46.776308880 +0300
++++ include.my/libc/sys/ucontext.h	2021-03-11 01:30:20.381526793 +0300
+@@ -0,0 +1,3 @@
++#ifndef _SYS_UCONTEXT_H
++#include <ucontext.h>
++#endif
+diff -Naur include/libc/x86/ucontext.h include.my/libc/x86/ucontext.h
+--- include/libc/x86/ucontext.h	2021-03-11 18:47:46.804309188 +0300
++++ include.my/libc/x86/ucontext.h	2021-03-11 01:29:28.227974790 +0300
+@@ -0,0 +1,3 @@
++#ifndef _SYS_UCONTEXT_H
++#include <ucontext.h>
++#endif
+diff -Naur include/spec/x86/libc/ucontext.h include.my/spec/x86/libc/ucontext.h
+--- include/spec/x86/libc/ucontext.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/spec/x86/libc/ucontext.h	2021-03-11 16:56:45.445667082 +0300
+@@ -0,0 +1,279 @@
++/* Copyright (C) 2001-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef _SYS_UCONTEXT_H
++#define _SYS_UCONTEXT_H	1
++
++#include <features.h>
++
++// #include <bits/types.h>
++// #include <bits/types/sigset_t.h>
++// #include <bits/types/stack_t.h>
++#include <sys/signal.h>
++#include <sys/select.h>
++
++#ifdef __USE_MISC
++# define __ctx(fld) fld
++#else
++# define __ctx(fld) __ ## fld
++#endif
++
++#ifdef __x86_64__
++
++/* Type for general register.  */
++__extension__ typedef long long int greg_t;
++
++/* Number of general registers.  */
++#define __NGREG	23
++#ifdef __USE_MISC
++# define NGREG	__NGREG
++#endif
++
++/* Container for all general registers.  */
++typedef greg_t gregset_t[__NGREG];
++
++#ifdef __USE_GNU
++/* Number of each register in the `gregset_t' array.  */
++enum
++{
++  REG_R8 = 0,
++# define REG_R8		REG_R8
++  REG_R9,
++# define REG_R9		REG_R9
++  REG_R10,
++# define REG_R10	REG_R10
++  REG_R11,
++# define REG_R11	REG_R11
++  REG_R12,
++# define REG_R12	REG_R12
++  REG_R13,
++# define REG_R13	REG_R13
++  REG_R14,
++# define REG_R14	REG_R14
++  REG_R15,
++# define REG_R15	REG_R15
++  REG_RDI,
++# define REG_RDI	REG_RDI
++  REG_RSI,
++# define REG_RSI	REG_RSI
++  REG_RBP,
++# define REG_RBP	REG_RBP
++  REG_RBX,
++# define REG_RBX	REG_RBX
++  REG_RDX,
++# define REG_RDX	REG_RDX
++  REG_RAX,
++# define REG_RAX	REG_RAX
++  REG_RCX,
++# define REG_RCX	REG_RCX
++  REG_RSP,
++# define REG_RSP	REG_RSP
++  REG_RIP,
++# define REG_RIP	REG_RIP
++  REG_EFL,
++# define REG_EFL	REG_EFL
++  REG_CSGSFS,		/* Actually short cs, gs, fs, __pad0.  */
++# define REG_CSGSFS	REG_CSGSFS
++  REG_ERR,
++# define REG_ERR	REG_ERR
++  REG_TRAPNO,
++# define REG_TRAPNO	REG_TRAPNO
++  REG_OLDMASK,
++# define REG_OLDMASK	REG_OLDMASK
++  REG_CR2
++# define REG_CR2	REG_CR2
++};
++#endif
++
++struct _libc_fpxreg
++{
++  unsigned short int __ctx(significand)[4];
++  unsigned short int __ctx(exponent);
++  unsigned short int __glibc_reserved1[3];
++};
++
++struct _libc_xmmreg
++{
++  __uint32_t	__ctx(element)[4];
++};
++
++struct _libc_fpstate
++{
++  /* 64-bit FXSAVE format.  */
++  __uint16_t		__ctx(cwd);
++  __uint16_t		__ctx(swd);
++  __uint16_t		__ctx(ftw);
++  __uint16_t		__ctx(fop);
++  __uint64_t		__ctx(rip);
++  __uint64_t		__ctx(rdp);
++  __uint32_t		__ctx(mxcsr);
++  __uint32_t		__ctx(mxcr_mask);
++  struct _libc_fpxreg	_st[8];
++  struct _libc_xmmreg	_xmm[16];
++  __uint32_t		__glibc_reserved1[24];
++};
++
++/* Structure to describe FPU registers.  */
++typedef struct _libc_fpstate *fpregset_t;
++
++/* Context to describe whole processor state.  */
++typedef struct
++  {
++    gregset_t __ctx(gregs);
++    /* Note that fpregs is a pointer.  */
++    fpregset_t __ctx(fpregs);
++    __extension__ unsigned long long __reserved1 [8];
++} mcontext_t;
++
++/* Userlevel context.  */
++typedef struct ucontext_t
++  {
++    unsigned long int __ctx(uc_flags);
++    struct ucontext_t *uc_link;
++    stack_t uc_stack;
++    mcontext_t uc_mcontext;
++    sigset_t uc_sigmask;
++    struct _libc_fpstate __fpregs_mem;
++    __extension__ unsigned long long int __ssp[4];
++  } ucontext_t;
++
++#else /* !__x86_64__ */
++
++/* Type for general register.  */
++typedef int greg_t;
++
++/* Number of general registers.  */
++#define __NGREG	19
++#ifdef __USE_MISC
++# define NGREG	__NGREG
++#endif
++
++/* Container for all general registers.  */
++typedef greg_t gregset_t[__NGREG];
++
++#ifdef __USE_GNU
++/* Number of each register is the `gregset_t' array.  */
++enum
++{
++  REG_GS = 0,
++# define REG_GS		REG_GS
++  REG_FS,
++# define REG_FS		REG_FS
++  REG_ES,
++# define REG_ES		REG_ES
++  REG_DS,
++# define REG_DS		REG_DS
++  REG_EDI,
++# define REG_EDI	REG_EDI
++  REG_ESI,
++# define REG_ESI	REG_ESI
++  REG_EBP,
++# define REG_EBP	REG_EBP
++  REG_ESP,
++# define REG_ESP	REG_ESP
++  REG_EBX,
++# define REG_EBX	REG_EBX
++  REG_EDX,
++# define REG_EDX	REG_EDX
++  REG_ECX,
++# define REG_ECX	REG_ECX
++  REG_EAX,
++# define REG_EAX	REG_EAX
++  REG_TRAPNO,
++# define REG_TRAPNO	REG_TRAPNO
++  REG_ERR,
++# define REG_ERR	REG_ERR
++  REG_EIP,
++# define REG_EIP	REG_EIP
++  REG_CS,
++# define REG_CS		REG_CS
++  REG_EFL,
++# define REG_EFL	REG_EFL
++  REG_UESP,
++# define REG_UESP	REG_UESP
++  REG_SS
++# define REG_SS	REG_SS
++};
++#endif
++
++/* Definitions taken from the kernel headers.  */
++struct _libc_fpreg
++{
++  unsigned short int __ctx(significand)[4];
++  unsigned short int __ctx(exponent);
++};
++
++struct _libc_fpstate
++{
++  unsigned long int __ctx(cw);
++  unsigned long int __ctx(sw);
++  unsigned long int __ctx(tag);
++  unsigned long int __ctx(ipoff);
++  unsigned long int __ctx(cssel);
++  unsigned long int __ctx(dataoff);
++  unsigned long int __ctx(datasel);
++  struct _libc_fpreg _st[8];
++  unsigned long int __ctx(status);
++};
++
++/* Structure to describe FPU registers.  */
++typedef struct _libc_fpstate *fpregset_t;
++
++/* Context to describe whole processor state.  */
++typedef struct
++  {
++    gregset_t __ctx(gregs);
++    /* Due to Linux's history we have to use a pointer here.  The SysV/i386
++       ABI requires a struct with the values.  */
++    fpregset_t __ctx(fpregs);
++    unsigned long int __ctx(oldmask);
++    unsigned long int __ctx(cr2);
++  } mcontext_t;
++
++/* Userlevel context.  */
++typedef struct ucontext_t
++  {
++    unsigned long int __ctx(uc_flags);
++    struct ucontext_t *uc_link;
++    stack_t uc_stack;
++    mcontext_t uc_mcontext;
++    sigset_t uc_sigmask;
++    struct _libc_fpstate __fpregs_mem;
++    unsigned long int __ssp[4];
++  } ucontext_t;
++
++#endif /* !__x86_64__ */
++
++#ifdef __cplusplus
++  extern "C"
++  {
++#endif
++    void *alloc_secondary_stack(char const *name, size_t stack_size);
++    void free_secondary_stack(void *stack);
++    int getcontext(ucontext_t *) __returns_twice;
++    ucontext_t *getcontextx(void);
++    int setcontext(const ucontext_t *);
++    void makecontext(ucontext_t *, void (*)(void), int, ...);
++    int signalcontext(ucontext_t *, int, __sighandler_t *);
++    int swapcontext(ucontext_t *, const ucontext_t *);
++#ifdef __cplusplus
++  };
++#endif
++
++#undef __ctx
++
++#endif /* sys/ucontext.h */
+diff -Naur include/spec/x86_64/libc/dwarf2.h include.my/spec/x86_64/libc/dwarf2.h
+--- include/spec/x86_64/libc/dwarf2.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/spec/x86_64/libc/dwarf2.h	2021-03-10 18:48:40.527726143 +0300
+@@ -0,0 +1,590 @@
++/* Declarations and definitions of codes relating to the DWARF2 symbolic
++   debugging information format.
++   Copyright (C) 1992-2021 Free Software Foundation, Inc.
++   Contributed by Gary Funck (gary@intrepid.com).  Derived from the
++   DWARF 1 implementation written by Ron Guilmette (rfg@monkeys.com).
++
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef _DWARF2_H
++#define _DWARF2_H	1
++
++/* This file is derived from the DWARF specification (a public document)
++   Revision 2.0.0 (July 27, 1993) developed by the UNIX International
++   Programming Languages Special Interest Group (UI/PLSIG) and distributed
++   by UNIX International.  Copies of this specification are available from
++   UNIX International, 20 Waterview Boulevard, Parsippany, NJ, 07054.  */
++
++/* This file is shared between GCC and GDB, and should not contain
++   prototypes.  */
++
++#ifndef __ASSEMBLER__
++/* Tag names and codes.  */
++
++enum dwarf_tag
++  {
++    DW_TAG_padding = 0x00,
++    DW_TAG_array_type = 0x01,
++    DW_TAG_class_type = 0x02,
++    DW_TAG_entry_point = 0x03,
++    DW_TAG_enumeration_type = 0x04,
++    DW_TAG_formal_parameter = 0x05,
++    DW_TAG_imported_declaration = 0x08,
++    DW_TAG_label = 0x0a,
++    DW_TAG_lexical_block = 0x0b,
++    DW_TAG_member = 0x0d,
++    DW_TAG_pointer_type = 0x0f,
++    DW_TAG_reference_type = 0x10,
++    DW_TAG_compile_unit = 0x11,
++    DW_TAG_string_type = 0x12,
++    DW_TAG_structure_type = 0x13,
++    DW_TAG_subroutine_type = 0x15,
++    DW_TAG_typedef = 0x16,
++    DW_TAG_union_type = 0x17,
++    DW_TAG_unspecified_parameters = 0x18,
++    DW_TAG_variant = 0x19,
++    DW_TAG_common_block = 0x1a,
++    DW_TAG_common_inclusion = 0x1b,
++    DW_TAG_inheritance = 0x1c,
++    DW_TAG_inlined_subroutine = 0x1d,
++    DW_TAG_module = 0x1e,
++    DW_TAG_ptr_to_member_type = 0x1f,
++    DW_TAG_set_type = 0x20,
++    DW_TAG_subrange_type = 0x21,
++    DW_TAG_with_stmt = 0x22,
++    DW_TAG_access_declaration = 0x23,
++    DW_TAG_base_type = 0x24,
++    DW_TAG_catch_block = 0x25,
++    DW_TAG_const_type = 0x26,
++    DW_TAG_constant = 0x27,
++    DW_TAG_enumerator = 0x28,
++    DW_TAG_file_type = 0x29,
++    DW_TAG_friend = 0x2a,
++    DW_TAG_namelist = 0x2b,
++    DW_TAG_namelist_item = 0x2c,
++    DW_TAG_packed_type = 0x2d,
++    DW_TAG_subprogram = 0x2e,
++    DW_TAG_template_type_param = 0x2f,
++    DW_TAG_template_value_param = 0x30,
++    DW_TAG_thrown_type = 0x31,
++    DW_TAG_try_block = 0x32,
++    DW_TAG_variant_part = 0x33,
++    DW_TAG_variable = 0x34,
++    DW_TAG_volatile_type = 0x35,
++    /* SGI/MIPS Extensions */
++    DW_TAG_MIPS_loop = 0x4081,
++    /* GNU extensions */
++    DW_TAG_format_label = 0x4101,	/* for FORTRAN 77 and Fortran 90 */
++    DW_TAG_function_template = 0x4102,	/* for C++ */
++    DW_TAG_class_template = 0x4103,	/* for C++ */
++    DW_TAG_GNU_BINCL = 0x4104,
++    DW_TAG_GNU_EINCL = 0x4105
++  };
++
++#define DW_TAG_lo_user	0x4080
++#define DW_TAG_hi_user	0xffff
++
++/* flag that tells whether entry has a child or not */
++#define DW_children_no   0
++#define	DW_children_yes  1
++
++/* Form names and codes.  */
++enum dwarf_form
++  {
++    DW_FORM_addr = 0x01,
++    DW_FORM_block2 = 0x03,
++    DW_FORM_block4 = 0x04,
++    DW_FORM_data2 = 0x05,
++    DW_FORM_data4 = 0x06,
++    DW_FORM_data8 = 0x07,
++    DW_FORM_string = 0x08,
++    DW_FORM_block = 0x09,
++    DW_FORM_block1 = 0x0a,
++    DW_FORM_data1 = 0x0b,
++    DW_FORM_flag = 0x0c,
++    DW_FORM_sdata = 0x0d,
++    DW_FORM_strp = 0x0e,
++    DW_FORM_udata = 0x0f,
++    DW_FORM_ref_addr = 0x10,
++    DW_FORM_ref1 = 0x11,
++    DW_FORM_ref2 = 0x12,
++    DW_FORM_ref4 = 0x13,
++    DW_FORM_ref8 = 0x14,
++    DW_FORM_ref_udata = 0x15,
++    DW_FORM_indirect = 0x16
++  };
++
++/* Attribute names and codes.  */
++
++enum dwarf_attribute
++  {
++    DW_AT_sibling = 0x01,
++    DW_AT_location = 0x02,
++    DW_AT_name = 0x03,
++    DW_AT_ordering = 0x09,
++    DW_AT_subscr_data = 0x0a,
++    DW_AT_byte_size = 0x0b,
++    DW_AT_bit_offset = 0x0c,
++    DW_AT_bit_size = 0x0d,
++    DW_AT_element_list = 0x0f,
++    DW_AT_stmt_list = 0x10,
++    DW_AT_low_pc = 0x11,
++    DW_AT_high_pc = 0x12,
++    DW_AT_language = 0x13,
++    DW_AT_member = 0x14,
++    DW_AT_discr = 0x15,
++    DW_AT_discr_value = 0x16,
++    DW_AT_visibility = 0x17,
++    DW_AT_import = 0x18,
++    DW_AT_string_length = 0x19,
++    DW_AT_common_reference = 0x1a,
++    DW_AT_comp_dir = 0x1b,
++    DW_AT_const_value = 0x1c,
++    DW_AT_containing_type = 0x1d,
++    DW_AT_default_value = 0x1e,
++    DW_AT_inline = 0x20,
++    DW_AT_is_optional = 0x21,
++    DW_AT_lower_bound = 0x22,
++    DW_AT_producer = 0x25,
++    DW_AT_prototyped = 0x27,
++    DW_AT_return_addr = 0x2a,
++    DW_AT_start_scope = 0x2c,
++    DW_AT_stride_size = 0x2e,
++    DW_AT_upper_bound = 0x2f,
++    DW_AT_abstract_origin = 0x31,
++    DW_AT_accessibility = 0x32,
++    DW_AT_address_class = 0x33,
++    DW_AT_artificial = 0x34,
++    DW_AT_base_types = 0x35,
++    DW_AT_calling_convention = 0x36,
++    DW_AT_count = 0x37,
++    DW_AT_data_member_location = 0x38,
++    DW_AT_decl_column = 0x39,
++    DW_AT_decl_file = 0x3a,
++    DW_AT_decl_line = 0x3b,
++    DW_AT_declaration = 0x3c,
++    DW_AT_discr_list = 0x3d,
++    DW_AT_encoding = 0x3e,
++    DW_AT_external = 0x3f,
++    DW_AT_frame_base = 0x40,
++    DW_AT_friend = 0x41,
++    DW_AT_identifier_case = 0x42,
++    DW_AT_macro_info = 0x43,
++    DW_AT_namelist_items = 0x44,
++    DW_AT_priority = 0x45,
++    DW_AT_segment = 0x46,
++    DW_AT_specification = 0x47,
++    DW_AT_static_link = 0x48,
++    DW_AT_type = 0x49,
++    DW_AT_use_location = 0x4a,
++    DW_AT_variable_parameter = 0x4b,
++    DW_AT_virtuality = 0x4c,
++    DW_AT_vtable_elem_location = 0x4d,
++    /* SGI/MIPS Extensions */
++    DW_AT_MIPS_fde = 0x2001,
++    DW_AT_MIPS_loop_begin = 0x2002,
++    DW_AT_MIPS_tail_loop_begin = 0x2003,
++    DW_AT_MIPS_epilog_begin = 0x2004,
++    DW_AT_MIPS_loop_unroll_factor = 0x2005,
++    DW_AT_MIPS_software_pipeline_depth = 0x2006,
++    DW_AT_MIPS_linkage_name = 0x2007,
++    DW_AT_MIPS_stride = 0x2008,
++    DW_AT_MIPS_abstract_name = 0x2009,
++    DW_AT_MIPS_clone_origin = 0x200a,
++    DW_AT_MIPS_has_inlines = 0x200b,
++    /* GNU extensions.  */
++    DW_AT_sf_names = 0x2101,
++    DW_AT_src_info = 0x2102,
++    DW_AT_mac_info = 0x2103,
++    DW_AT_src_coords = 0x2104,
++    DW_AT_body_begin = 0x2105,
++    DW_AT_body_end = 0x2106
++  };
++
++#define DW_AT_lo_user	0x2000	/* implementation-defined range start */
++#define DW_AT_hi_user	0x3ff0	/* implementation-defined range end */
++
++/* Location atom names and codes.  */
++
++enum dwarf_location_atom
++  {
++    DW_OP_addr = 0x03,
++    DW_OP_deref = 0x06,
++    DW_OP_const1u = 0x08,
++    DW_OP_const1s = 0x09,
++    DW_OP_const2u = 0x0a,
++    DW_OP_const2s = 0x0b,
++    DW_OP_const4u = 0x0c,
++    DW_OP_const4s = 0x0d,
++    DW_OP_const8u = 0x0e,
++    DW_OP_const8s = 0x0f,
++    DW_OP_constu = 0x10,
++    DW_OP_consts = 0x11,
++    DW_OP_dup = 0x12,
++    DW_OP_drop = 0x13,
++    DW_OP_over = 0x14,
++    DW_OP_pick = 0x15,
++    DW_OP_swap = 0x16,
++    DW_OP_rot = 0x17,
++    DW_OP_xderef = 0x18,
++    DW_OP_abs = 0x19,
++    DW_OP_and = 0x1a,
++    DW_OP_div = 0x1b,
++    DW_OP_minus = 0x1c,
++    DW_OP_mod = 0x1d,
++    DW_OP_mul = 0x1e,
++    DW_OP_neg = 0x1f,
++    DW_OP_not = 0x20,
++    DW_OP_or = 0x21,
++    DW_OP_plus = 0x22,
++    DW_OP_plus_uconst = 0x23,
++    DW_OP_shl = 0x24,
++    DW_OP_shr = 0x25,
++    DW_OP_shra = 0x26,
++    DW_OP_xor = 0x27,
++    DW_OP_bra = 0x28,
++    DW_OP_eq = 0x29,
++    DW_OP_ge = 0x2a,
++    DW_OP_gt = 0x2b,
++    DW_OP_le = 0x2c,
++    DW_OP_lt = 0x2d,
++    DW_OP_ne = 0x2e,
++    DW_OP_skip = 0x2f,
++    DW_OP_lit0 = 0x30,
++    DW_OP_lit1 = 0x31,
++    DW_OP_lit2 = 0x32,
++    DW_OP_lit3 = 0x33,
++    DW_OP_lit4 = 0x34,
++    DW_OP_lit5 = 0x35,
++    DW_OP_lit6 = 0x36,
++    DW_OP_lit7 = 0x37,
++    DW_OP_lit8 = 0x38,
++    DW_OP_lit9 = 0x39,
++    DW_OP_lit10 = 0x3a,
++    DW_OP_lit11 = 0x3b,
++    DW_OP_lit12 = 0x3c,
++    DW_OP_lit13 = 0x3d,
++    DW_OP_lit14 = 0x3e,
++    DW_OP_lit15 = 0x3f,
++    DW_OP_lit16 = 0x40,
++    DW_OP_lit17 = 0x41,
++    DW_OP_lit18 = 0x42,
++    DW_OP_lit19 = 0x43,
++    DW_OP_lit20 = 0x44,
++    DW_OP_lit21 = 0x45,
++    DW_OP_lit22 = 0x46,
++    DW_OP_lit23 = 0x47,
++    DW_OP_lit24 = 0x48,
++    DW_OP_lit25 = 0x49,
++    DW_OP_lit26 = 0x4a,
++    DW_OP_lit27 = 0x4b,
++    DW_OP_lit28 = 0x4c,
++    DW_OP_lit29 = 0x4d,
++    DW_OP_lit30 = 0x4e,
++    DW_OP_lit31 = 0x4f,
++    DW_OP_reg0 = 0x50,
++    DW_OP_reg1 = 0x51,
++    DW_OP_reg2 = 0x52,
++    DW_OP_reg3 = 0x53,
++    DW_OP_reg4 = 0x54,
++    DW_OP_reg5 = 0x55,
++    DW_OP_reg6 = 0x56,
++    DW_OP_reg7 = 0x57,
++    DW_OP_reg8 = 0x58,
++    DW_OP_reg9 = 0x59,
++    DW_OP_reg10 = 0x5a,
++    DW_OP_reg11 = 0x5b,
++    DW_OP_reg12 = 0x5c,
++    DW_OP_reg13 = 0x5d,
++    DW_OP_reg14 = 0x5e,
++    DW_OP_reg15 = 0x5f,
++    DW_OP_reg16 = 0x60,
++    DW_OP_reg17 = 0x61,
++    DW_OP_reg18 = 0x62,
++    DW_OP_reg19 = 0x63,
++    DW_OP_reg20 = 0x64,
++    DW_OP_reg21 = 0x65,
++    DW_OP_reg22 = 0x66,
++    DW_OP_reg23 = 0x67,
++    DW_OP_reg24 = 0x68,
++    DW_OP_reg25 = 0x69,
++    DW_OP_reg26 = 0x6a,
++    DW_OP_reg27 = 0x6b,
++    DW_OP_reg28 = 0x6c,
++    DW_OP_reg29 = 0x6d,
++    DW_OP_reg30 = 0x6e,
++    DW_OP_reg31 = 0x6f,
++    DW_OP_breg0 = 0x70,
++    DW_OP_breg1 = 0x71,
++    DW_OP_breg2 = 0x72,
++    DW_OP_breg3 = 0x73,
++    DW_OP_breg4 = 0x74,
++    DW_OP_breg5 = 0x75,
++    DW_OP_breg6 = 0x76,
++    DW_OP_breg7 = 0x77,
++    DW_OP_breg8 = 0x78,
++    DW_OP_breg9 = 0x79,
++    DW_OP_breg10 = 0x7a,
++    DW_OP_breg11 = 0x7b,
++    DW_OP_breg12 = 0x7c,
++    DW_OP_breg13 = 0x7d,
++    DW_OP_breg14 = 0x7e,
++    DW_OP_breg15 = 0x7f,
++    DW_OP_breg16 = 0x80,
++    DW_OP_breg17 = 0x81,
++    DW_OP_breg18 = 0x82,
++    DW_OP_breg19 = 0x83,
++    DW_OP_breg20 = 0x84,
++    DW_OP_breg21 = 0x85,
++    DW_OP_breg22 = 0x86,
++    DW_OP_breg23 = 0x87,
++    DW_OP_breg24 = 0x88,
++    DW_OP_breg25 = 0x89,
++    DW_OP_breg26 = 0x8a,
++    DW_OP_breg27 = 0x8b,
++    DW_OP_breg28 = 0x8c,
++    DW_OP_breg29 = 0x8d,
++    DW_OP_breg30 = 0x8e,
++    DW_OP_breg31 = 0x8f,
++    DW_OP_regx = 0x90,
++    DW_OP_fbreg = 0x91,
++    DW_OP_bregx = 0x92,
++    DW_OP_piece = 0x93,
++    DW_OP_deref_size = 0x94,
++    DW_OP_xderef_size = 0x95,
++    DW_OP_nop = 0x96
++  };
++
++#define DW_OP_lo_user	0x80	/* implementation-defined range start */
++#define DW_OP_hi_user	0xff	/* implementation-defined range end */
++
++/* Type encodings.  */
++
++enum dwarf_type
++  {
++    DW_ATE_void = 0x0,
++    DW_ATE_address = 0x1,
++    DW_ATE_boolean = 0x2,
++    DW_ATE_complex_float = 0x3,
++    DW_ATE_float = 0x4,
++    DW_ATE_signed = 0x5,
++    DW_ATE_signed_char = 0x6,
++    DW_ATE_unsigned = 0x7,
++    DW_ATE_unsigned_char = 0x8
++  };
++
++#define	DW_ATE_lo_user 0x80
++#define	DW_ATE_hi_user 0xff
++
++/* Array ordering names and codes.  */
++enum dwarf_array_dim_ordering
++  {
++    DW_ORD_row_major = 0,
++    DW_ORD_col_major = 1
++  };
++
++/* access attribute */
++enum dwarf_access_attribute
++  {
++    DW_ACCESS_public = 1,
++    DW_ACCESS_protected = 2,
++    DW_ACCESS_private = 3
++  };
++
++/* visibility */
++enum dwarf_visibility_attribute
++  {
++    DW_VIS_local = 1,
++    DW_VIS_exported = 2,
++    DW_VIS_qualified = 3
++  };
++
++/* virtuality */
++enum dwarf_virtuality_attribute
++  {
++    DW_VIRTUALITY_none = 0,
++    DW_VIRTUALITY_virtual = 1,
++    DW_VIRTUALITY_pure_virtual = 2
++  };
++
++/* case sensitivity */
++enum dwarf_id_case
++  {
++    DW_ID_case_sensitive = 0,
++    DW_ID_up_case = 1,
++    DW_ID_down_case = 2,
++    DW_ID_case_insensitive = 3
++  };
++
++/* calling convention */
++enum dwarf_calling_convention
++  {
++    DW_CC_normal = 0x1,
++    DW_CC_program = 0x2,
++    DW_CC_nocall = 0x3
++  };
++
++#define DW_CC_lo_user 0x40
++#define DW_CC_hi_user 0xff
++
++/* inline attribute */
++enum dwarf_inline_attribute
++  {
++    DW_INL_not_inlined = 0,
++    DW_INL_inlined = 1,
++    DW_INL_declared_not_inlined = 2,
++    DW_INL_declared_inlined = 3
++  };
++
++/* discriminant lists */
++enum dwarf_discrim_list
++  {
++    DW_DSC_label = 0,
++    DW_DSC_range = 1
++  };
++
++/* line number opcodes */
++enum dwarf_line_number_ops
++  {
++    DW_LNS_extended_op = 0,
++    DW_LNS_copy = 1,
++    DW_LNS_advance_pc = 2,
++    DW_LNS_advance_line = 3,
++    DW_LNS_set_file = 4,
++    DW_LNS_set_column = 5,
++    DW_LNS_negate_stmt = 6,
++    DW_LNS_set_basic_block = 7,
++    DW_LNS_const_add_pc = 8,
++    DW_LNS_fixed_advance_pc = 9
++  };
++
++/* line number extended opcodes */
++enum dwarf_line_number_x_ops
++  {
++    DW_LNE_end_sequence = 1,
++    DW_LNE_set_address = 2,
++    DW_LNE_define_file = 3
++  };
++
++/* call frame information */
++enum dwarf_call_frame_info
++  {
++    DW_CFA_advance_loc = 0x40,
++    DW_CFA_offset = 0x80,
++    DW_CFA_restore = 0xc0,
++    DW_CFA_nop = 0x00,
++    DW_CFA_set_loc = 0x01,
++    DW_CFA_advance_loc1 = 0x02,
++    DW_CFA_advance_loc2 = 0x03,
++    DW_CFA_advance_loc4 = 0x04,
++    DW_CFA_offset_extended = 0x05,
++    DW_CFA_restore_extended = 0x06,
++    DW_CFA_undefined = 0x07,
++    DW_CFA_same_value = 0x08,
++    DW_CFA_register = 0x09,
++    DW_CFA_remember_state = 0x0a,
++    DW_CFA_restore_state = 0x0b,
++    DW_CFA_def_cfa = 0x0c,
++    DW_CFA_def_cfa_register = 0x0d,
++    DW_CFA_def_cfa_offset = 0x0e,
++    DW_CFA_def_cfa_expression = 0x0f,
++    DW_CFA_expression = 0x10,
++    /* Dwarf 2.1 */
++    DW_CFA_offset_extended_sf = 0x11,
++    DW_CFA_def_cfa_sf = 0x12,
++    DW_CFA_def_cfa_offset_sf = 0x13,
++
++    /* SGI/MIPS specific */
++    DW_CFA_MIPS_advance_loc8 = 0x1d,
++
++    /* GNU extensions */
++    DW_CFA_GNU_window_save = 0x2d,
++    DW_CFA_GNU_args_size = 0x2e,
++    DW_CFA_GNU_negative_offset_extended = 0x2f
++  };
++
++#define DW_CIE_ID	  0xffffffff
++#define DW_CIE_VERSION	  1
++
++#define DW_CFA_extended   0
++#define DW_CFA_low_user   0x1c
++#define DW_CFA_high_user  0x3f
++
++#define DW_CHILDREN_no		     0x00
++#define DW_CHILDREN_yes		     0x01
++
++#define DW_ADDR_none		0
++
++/* Source language names and codes.  */
++
++enum dwarf_source_language
++  {
++    DW_LANG_C89 = 0x0001,
++    DW_LANG_C = 0x0002,
++    DW_LANG_Ada83 = 0x0003,
++    DW_LANG_C_plus_plus = 0x0004,
++    DW_LANG_Cobol74 = 0x0005,
++    DW_LANG_Cobol85 = 0x0006,
++    DW_LANG_Fortran77 = 0x0007,
++    DW_LANG_Fortran90 = 0x0008,
++    DW_LANG_Pascal83 = 0x0009,
++    DW_LANG_Modula2 = 0x000a,
++    DW_LANG_Java = 0x000b,
++    DW_LANG_Mips_Assembler = 0x8001
++  };
++
++
++#define DW_LANG_lo_user 0x8000	/* implementation-defined range start */
++#define DW_LANG_hi_user 0xffff	/* implementation-defined range start */
++
++/* Names and codes for macro information.  */
++
++enum dwarf_macinfo_record_type
++  {
++    DW_MACINFO_define = 1,
++    DW_MACINFO_undef = 2,
++    DW_MACINFO_start_file = 3,
++    DW_MACINFO_end_file = 4,
++    DW_MACINFO_vendor_ext = 255
++  };
++
++#endif /* !ASSEMBLER */
++
++/* @@@ For use with GNU frame unwind information.  */
++
++#define DW_EH_PE_absptr		0x00
++#define DW_EH_PE_omit		0xff
++
++#define DW_EH_PE_uleb128	0x01
++#define DW_EH_PE_udata2		0x02
++#define DW_EH_PE_udata4		0x03
++#define DW_EH_PE_udata8		0x04
++#define DW_EH_PE_sleb128	0x09
++#define DW_EH_PE_sdata2		0x0A
++#define DW_EH_PE_sdata4		0x0B
++#define DW_EH_PE_sdata8		0x0C
++#define DW_EH_PE_signed		0x08
++
++#define DW_EH_PE_pcrel		0x10
++#define DW_EH_PE_textrel	0x20
++#define DW_EH_PE_datarel	0x30
++#define DW_EH_PE_funcrel	0x40
++#define DW_EH_PE_aligned	0x50
++
++#define DW_EH_PE_indirect	0x80
++
++#endif /* dwarf2.h */
+diff -Naur include/spec/x86_64/libc/sysdep.h include.my/spec/x86_64/libc/sysdep.h
+--- include/spec/x86_64/libc/sysdep.h	1970-01-01 03:00:00.000000000 +0300
++++ include.my/spec/x86_64/libc/sysdep.h	2021-03-11 00:52:09.146225479 +0300
+@@ -0,0 +1,3 @@
++#include <sysdeps/x86_64/sysdep.h>
++#include <libc-symbols.h>
++
+diff -Naur src/lib/libc/contrib/gensym_h src.my/lib/libc/contrib/gensym_h
+--- src/lib/libc/contrib/gensym_h	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/contrib/gensym_h	2021-03-11 18:29:07.156142657 +0300
+@@ -0,0 +1,18 @@
++#
++# taken from glibc distro - using python3 script from glibc/scripts/gen-as-const.py
++# and sym file intended for unix/sysv/linux/x86_64/ucontext_i.sym
++#
++# if you want to modify:
++# 1. run compilation with VERBOSE= in make and find in listing command line generated for compilation of makecontext.c
++# 2. cut it from compiler name (should be callable in PATH) till -c option and update script below as string after --cc
++#    of course, it it contatin other " - then screen it in shell standard way, e.g. \"
++# 3. take appropriate ucontext_i.sym file for your ARCH and run script, should be NO error (could be warnings)
++# 4. copy-paste result as set of defines to your own ucontext_i.h file (check current one),
++#    mine is inside genode distro as after prepare_port
++#    contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/lib/libc/amd64/gen/ucontext_i.h
++#
++
++python3 ../glibc/scripts/gen-as-const.py \
++--cc "genode-x86-gcc  -DPIC -D__NO_TLS -D__FreeBSD__=12 -fno-builtin-sin -fno-builtin-cos -fno-builtin-sinf -fno-builtin-cosf -D__GENODE__ -ffunction-sections -fno-strict-aliasing -nostdinc -g -m64 -mcmodel=large -O2 -MMD -MP -MT 'getcontext.o getcontext.d'  -Wno-error=implicit-fallthrough  -fPIC -D__ASSEMBLY__ -I. -I/var/services/homes/admin/gen/21.02/repos/libports/src/lib/libc -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/sys/crypto/chacha20 -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/sys -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/lib/libc/locale -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/lib/libc/include -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/lib/libc/stdio -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/lib/libc/net -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/src/lib/libc/contrib/gdtoa -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/include/libc -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/include/spec/x86_64/libc -I/var/services/homes/admin/gen/21.02/contrib/libc-3ec28a350593879749a015a584ed24ffd7d3edce/include/spec/x86/libc -I/var/services/homes/admin/gen/21.02/repos/base/include/spec/x86 -I/var/services/homes/admin/gen/21.02/repos/os/include/spec/x86 -I/var/services/homes/admin/gen/21.02/repos/base/include/spec/x86_64 -I/var/services/homes/admin/gen/21.02/repos/os/include/spec/x86_64 -I/var/services/homes/admin/gen/21.02/repos/libports/include/spec/x86_64 -I/var/services/homes/admin/gen/21.02/repos/world/include/spec/x86_64 -I/var/services/homes/admin/gen/21.02/repos/base-nova/include/spec/64bit -I/var/services/homes/admin/gen/21.02/repos/base/include/spec/64bit -I/var/services/homes/admin/gen/21.02/repos/libports/include/spec/64bit -I/var/services/homes/admin/gen/21.02/repos/libports/include/libc-genode -I/var/services/homes/admin/gen/21.02/repos/base-nova/include -I/var/services/homes/admin/gen/21.02/repos/base/include -I/var/services/homes/admin/gen/21.02/repos/os/include -I/var/services/homes/admin/gen/21.02/repos/demo/include -I/var/services/homes/admin/gen/21.02/repos/libports/include -I/var/services/homes/admin/gen/21.02/repos/ports/include -I/var/services/homes/admin/gen/21.02/repos/dde_linux/include -I/var/services/homes/admin/gen/21.02/repos/gems/include -I/var/services/homes/admin/gen/21.02/repos/world/include -I/usr/local/genode/tool/19.05/bin/../lib/gcc/x86_64-pc-elf/8.3.0/include -D_NSIG=NSIG" \
++../glibc/sysdeps/unix/sysv/linux/x86_64/ucontext_i.sym
++
+diff -Naur src/lib/libc/lib/libc/amd64/gen/__start_context.S src.my/lib/libc/lib/libc/amd64/gen/__start_context.S
+--- src/lib/libc/lib/libc/amd64/gen/__start_context.S	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/__start_context.S	2021-03-11 00:27:40.483710436 +0300
+@@ -0,0 +1,124 @@
++/* Copyright (C) 2002-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Andreas Jaeger <aj@suse.de>, 2002.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#include <sysdep.h>
++
++#if SHSTK_ENABLED
++# include <asm/prctl.h>
++# include "ucontext_i.h"
++
++/* Use CALL to push __start_context onto the new stack as well as the new
++   shadow stack.  RDI points to ucontext:
++   Incoming:
++     __ssp[0]: The original caller's shadow stack pointer.
++     __ssp[1]: The size of the new shadow stack.
++     __ssp[2]: The size of the new shadow stack.
++   Outgoing:
++     __ssp[0]: The new shadow stack pointer.
++     __ssp[1]: The base address of the new shadow stack.
++     __ssp[2]: The size of the new shadow stack.
++ */
++
++ENTRY(__push___start_context)
++	/* Save the pointer to ucontext.  */
++	movq	%rdi, %r9
++	/* Get the original shadow stack pointer.  */
++	rdsspq	%r8
++	/* Save the original stack pointer.  */
++	movq	%rsp, %rdx
++	/* Load the top of the new stack into RSI.  */
++	movq 	oRSP(%rdi), %rsi
++	/* Add 8 bytes to RSI since CALL will push the 8-byte return
++	   address onto stack.  */
++	leaq	8(%rsi), %rsp
++	/* Allocate the new shadow stack.  The size of the new shadow
++	   stack is passed in __ssp[1].  */
++	lea	(oSSP + 8)(%rdi), %RSI_LP
++	movl	$ARCH_CET_ALLOC_SHSTK, %edi
++	movl	$__NR_arch_prctl, %eax
++	/* The new shadow stack base is returned in __ssp[1].  */
++	syscall
++	testq	%rax, %rax
++	jne	L(hlt)		/* This should never happen.  */
++
++	/* Get the size of the new shadow stack.  */
++	movq	8(%rsi), %rdi
++
++	/* Get the base address of the new shadow stack.  */
++	movq	(%rsi), %rsi
++
++	/* Use the restore stoken to restore the new shadow stack.  */
++	rstorssp -8(%rsi, %rdi)
++
++	/* Save the restore token on the original shadow stack.  */
++	saveprevssp
++
++	/* Push the address of "jmp __start_context" onto the new stack
++	   as well as the new shadow stack.  */
++	call	1f
++	jmp	__start_context
++1:
++
++	/* Get the new shadow stack pointer.  */
++	rdsspq	%rdi
++
++	/* Use the restore stoken to restore the original shadow stack.  */
++	rstorssp -8(%r8)
++
++	/* Save the restore token on the new shadow stack.  */
++	saveprevssp
++
++	/* Store the new shadow stack pointer in __ssp[0].  */
++	movq	%rdi, oSSP(%r9)
++
++	/* Restore the original stack.  */
++	mov	%rdx, %rsp
++	ret
++END(__push___start_context)
++#endif
++
++/* This is the helper code which gets called if a function which is
++   registered with 'makecontext' returns.  In this case we have to
++   install the context listed in the uc_link element of the context
++   'makecontext' manipulated at the time of the 'makecontext' call.
++   If the pointer is NULL the process must terminate.  */
++
++
++ENTRY(__start_context)
++	/* This removes the parameters passed to the function given to
++	   'makecontext' from the stack.  RBX contains the address
++	   on the stack pointer for the next context.  */
++	movq	%rbx, %rsp
++
++	/* Don't use pop here so that stack is aligned to 16 bytes.  */
++	movq	(%rsp), %rdi		/* This is the next context.  */
++	testq	%rdi, %rdi
++	je	2f			/* If it is zero exit.  */
++
++	call	__setcontext
++	/* If this returns (which can happen if the syscall fails) we'll
++	   exit the program with the return error value (-1).  */
++	movq	%rax,%rdi
++
++2:
++	call	HIDDEN_JUMPTARGET(exit)
++	/* The 'exit' call should never return.  In case it does cause
++	   the process to terminate.  */
++L(hlt):
++	hlt
++END(__start_context)
+diff -Naur src/lib/libc/lib/libc/amd64/gen/getcontext.S src.my/lib/libc/lib/libc/amd64/gen/getcontext.S
+--- src/lib/libc/lib/libc/amd64/gen/getcontext.S	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/getcontext.S	2021-03-11 00:27:40.483710436 +0300
+@@ -0,0 +1,137 @@
++/* Save current context.
++   Copyright (C) 2002-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Andreas Jaeger <aj@suse.de>, 2002.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#include <sysdep.h>
++/*#include <asm/prctl.h>*/
++
++#include "ucontext_i.h"
++
++/*  int __getcontext (ucontext_t *ucp)
++
++  Saves the machine context in UCP such that when it is activated,
++  it appears as if __getcontext() returned again.
++
++  This implementation is intended to be used for *synchronous* context
++  switches only.  Therefore, it does not have to save anything
++  other than the PRESERVED state.  */
++
++
++ENTRY(__getcontext)
++	/* Save the preserved registers, the registers used for passing
++	   args, and the return address.  */
++	movq	%rbx, oRBX(%rdi)
++	movq	%rbp, oRBP(%rdi)
++	movq	%r12, oR12(%rdi)
++	movq	%r13, oR13(%rdi)
++	movq	%r14, oR14(%rdi)
++	movq	%r15, oR15(%rdi)
++
++	movq	%rdi, oRDI(%rdi)
++	movq	%rsi, oRSI(%rdi)
++	movq	%rdx, oRDX(%rdi)
++	movq	%rcx, oRCX(%rdi)
++	movq	%r8, oR8(%rdi)
++	movq	%r9, oR9(%rdi)
++
++	movq	(%rsp), %rcx
++	movq	%rcx, oRIP(%rdi)
++	leaq	8(%rsp), %rcx		/* Exclude the return address.  */
++	movq	%rcx, oRSP(%rdi)
++
++#if SHSTK_ENABLED
++	/* Check if shadow stack is enabled.  */
++	testl	$X86_FEATURE_1_SHSTK, %fs:FEATURE_1_OFFSET
++	jz	L(no_shstk)
++
++	/* Save RDI in RDX which won't be clobbered by syscall.  */
++	movq	%rdi, %rdx
++
++	xorl	%eax, %eax
++	cmpq	%fs:SSP_BASE_OFFSET, %rax
++	jnz	L(shadow_stack_bound_recorded)
++
++	/* Get the base address and size of the default shadow stack
++	   which must be the current shadow stack since nothing has
++	   been recorded yet.  */
++	sub	$24, %RSP_LP
++	mov	%RSP_LP, %RSI_LP
++	movl	$ARCH_CET_STATUS, %edi
++	movl	$__NR_arch_prctl, %eax
++	syscall
++	testq	%rax, %rax
++	jz	L(continue_no_err)
++
++	/* This should never happen.  */
++	hlt
++
++L(continue_no_err):
++	/* Record the base of the current shadow stack.  */
++	movq	8(%rsp), %rax
++	movq	%rax, %fs:SSP_BASE_OFFSET
++	add	$24, %RSP_LP
++
++	/* Restore RDI.  */
++	movq	%rdx, %rdi
++
++L(shadow_stack_bound_recorded):
++	/* Get the current shadow stack pointer.  */
++	rdsspq	%rax
++	/* NB: Save the caller's shadow stack so that we can jump back
++	   to the caller directly.  */
++	addq	$8, %rax
++	movq	%rax, oSSP(%rdx)
++
++	/* Save the current shadow stack base in ucontext.  */
++	movq	%fs:SSP_BASE_OFFSET, %rax
++	movq	%rax, (oSSP + 8)(%rdi)
++
++L(no_shstk):
++#endif
++	/* We have separate floating-point register content memory on the
++	   stack.  We use the __fpregs_mem block in the context.  Set the
++	   links up correctly.  */
++
++	leaq	oFPREGSMEM(%rdi), %rcx
++	movq	%rcx, oFPREGS(%rdi)
++	/* Save the floating-point environment.  */
++	fnstenv	(%rcx)
++	fldenv	(%rcx)
++	stmxcsr oMXCSR(%rdi)
++#if 0
++	/* Save the current signal mask with
++	   rt_sigprocmask (SIG_BLOCK, NULL, set,_NSIG/8).  */
++	leaq	oSIGMASK(%rdi), %rdx
++	xorl	%esi,%esi
++#if SIG_BLOCK == 0
++	xorl	%edi, %edi
++#else
++	movl	$SIG_BLOCK, %edi
++#endif
++	movl	$_NSIG8,%r10d
++	movl	$__NR_rt_sigprocmask, %eax
++	syscall
++	cmpq	$-4095, %rax		/* Check %rax for error.  */
++	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
++#endif
++	/* All done, return 0 for success.  */
++	xorl	%eax, %eax
++	ret
++PSEUDO_END(__getcontext)
++
++weak_alias (__getcontext, getcontext)
+diff -Naur src/lib/libc/lib/libc/amd64/gen/makecontext.c src.my/lib/libc/lib/libc/amd64/gen/makecontext.c
+--- src/lib/libc/lib/libc/amd64/gen/makecontext.c	2018-12-07 03:01:45.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/makecontext.c	2021-03-10 23:41:20.621603203 +0300
+@@ -1,109 +1,155 @@
+-/*-
+- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+- *
+- * Copyright (c) 2003 Marcel Moolenaar
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- *
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- */
++/* Create new context.
++   Copyright (C) 2002-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Andreas Jaeger <aj@suse.de>, 2002.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
+ 
+-#include <sys/cdefs.h>
+-__FBSDID("$FreeBSD: releng/12.0/lib/libc/amd64/gen/makecontext.c 326193 2017-11-25 17:12:48Z pfg $");
+-
+-#include <sys/types.h>
+-#include <sys/ucontext.h>
++#include <sysdep.h>
+ #include <stdarg.h>
+-#include <stdlib.h>
+-
+-typedef void (*func_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+-    uint64_t);
+-
+-/* Prototypes */
+-static void makectx_wrapper(ucontext_t *ucp, func_t func, uint64_t *args);
+-
+-__weak_reference(__makecontext, makecontext);
+-
+-void
+-__makecontext(ucontext_t *ucp, void (*start)(void), int argc, ...)
++#include <stdint.h>
++#include <ucontext.h>
++#if SHSTK_ENABLED
++# include <pthread.h>
++# include <libc-pointer-arith.h>
++# include <sys/prctl.h>
++#endif
++
++#include "ucontext_i.h"
++
++/* This implementation can handle any ARGC value but only
++   normal integer parameters.
++   makecontext sets up a stack and the registers for the
++   user context. The stack looks like this:
++               +-----------------------+
++               | next context          |
++               +-----------------------+
++               | parameter 7-n         |
++	       +-----------------------+
++	       | trampoline address    |
++    %rsp ->    +-----------------------+
++
++   The registers are set up like this:
++     %rdi,%rsi,%rdx,%rcx,%r8,%r9: parameter 1 to 6
++     %rbx   : address of next context
++     %rsp   : stack pointer.
++*/
++
++/* XXX: This implementation currently only handles integer arguments.
++   To handle long int and pointer arguments the va_arg arguments needs
++   to be changed to long and also the stdlib/tst-setcontext.c file needs
++   to be changed to pass long arguments to makecontext.  */
++
++extern void __start_context(void) attribute_hidden;
++extern void __push___start_context(ucontext_t *)
++    attribute_hidden;
++void __makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
+ {
+-	uint64_t *args;
+-	uint64_t *sp;
+-	va_list ap;
+-	int i;
+-
+-	/* A valid context is required. */
+-	if ((ucp == NULL) || (ucp->uc_mcontext.mc_len != sizeof(mcontext_t)))
+-		return;
+-	else if ((argc < 0) || (argc > 6) || (ucp->uc_stack.ss_sp == NULL) ||
+-	    (ucp->uc_stack.ss_size < MINSIGSTKSZ)) {
+-		/*
+-		 * This should really return -1 with errno set to ENOMEM
+-		 * or something, but the spec says that makecontext is
+-		 * a void function.   At least make sure that the context
+-		 * isn't valid so it can't be used without an error.
+-		 */
+-		ucp->uc_mcontext.mc_len = 0;
+-		return;
+-	}
+-
+-	/* Align the stack to 16 bytes. */
+-	sp = (uint64_t *)(ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+-	sp = (uint64_t *)((uint64_t)sp & ~15UL);
+-
+-	/* Allocate space for a maximum of 6 arguments on the stack. */
+-	args = sp - 6;
+-
+-	/*
+-	 * Account for arguments on stack and do the funky C entry alignment.
+-	 * This means that we need an 8-byte-odd alignment since the ABI expects
+-	 * the return address to be pushed, thus breaking the 16 byte alignment.
+-	 */
+-	sp -= 7;
+-
+-	/* Add the arguments: */
+-	va_start(ap, argc);
+-	for (i = 0; i < argc; i++)
+-		args[i] = va_arg(ap, uint64_t);
+-	va_end(ap);
+-	for (i = argc; i < 6; i++)
+-		args[i] = 0;
+-
+-	ucp->uc_mcontext.mc_rdi = (register_t)ucp;
+-	ucp->uc_mcontext.mc_rsi = (register_t)start;
+-	ucp->uc_mcontext.mc_rdx = (register_t)args;
+-	ucp->uc_mcontext.mc_rbp = 0;
+-	ucp->uc_mcontext.mc_rbx = (register_t)sp;
+-	ucp->uc_mcontext.mc_rsp = (register_t)sp;
+-	ucp->uc_mcontext.mc_rip = (register_t)makectx_wrapper;
+-}
++  greg_t *sp;
++  unsigned int idx_uc_link;
++  va_list ap;
++  int i;
++
++  /* Generate room on stack for parameter if needed and uc_link.  */
++  sp = (greg_t *) ((uintptr_t) ucp->uc_stack.ss_sp
++		   + ucp->uc_stack.ss_size);
++  sp -= (argc > 6 ? argc - 6 : 0) + 1;
++  /* Align stack and make space for trampoline address.  */
++  sp = (greg_t *) ((((uintptr_t) sp) & -16L) - 8);
++
++  idx_uc_link = (argc > 6 ? argc - 6 : 0) + 1;
++
++  /* Setup context ucp.  */
++  /* Address to jump to.  */
++  ucp->uc_mcontext.gregs[REG_RIP] = (uintptr_t) func;
++  /* Setup rbx.*/
++  ucp->uc_mcontext.gregs[REG_RBX] = (uintptr_t) &sp[idx_uc_link];
++  ucp->uc_mcontext.gregs[REG_RSP] = (uintptr_t) sp;
++
++  /* Setup stack.  */
++#if SHSTK_ENABLED
++  struct pthread *self = THREAD_SELF;
++  unsigned int feature_1 = THREAD_GETMEM (self, header.feature_1);
++  /* NB: We must check feature_1 before accessing __ssp since caller
++	 may be compiled against ucontext_t without __ssp.  */
++  if ((feature_1 & X86_FEATURE_1_SHSTK) != 0)
++    {
++      /* Shadow stack is enabled.  We need to allocate a new shadow
++         stack.  */
++      unsigned long ssp_size = (((uintptr_t) sp
++				 - (uintptr_t) ucp->uc_stack.ss_sp)
++				>> STACK_SIZE_TO_SHADOW_STACK_SIZE_SHIFT);
++      /* Align shadow stack to 8 bytes.  */
++      ssp_size = ALIGN_UP (ssp_size, 8);
++
++      ucp->__ssp[1] = ssp_size;
++      ucp->__ssp[2] = ssp_size;
++
++      /* Call __push___start_context to allocate a new shadow stack,
++	 push __start_context onto the new stack as well as the new
++	 shadow stack.  NB: After __push___start_context returns,
++	   ucp->__ssp[0]: The new shadow stack pointer.
++	   ucp->__ssp[1]: The base address of the new shadow stack.
++	   ucp->__ssp[2]: The size of the new shadow stack.
++       */
++      __push___start_context (ucp);
++    }
++  else
++#endif
++    sp[0] = (uintptr_t) &__start_context;
++  sp[idx_uc_link] = (uintptr_t) ucp->uc_link;
++
++  va_start (ap, argc);
++  /* Handle arguments.
++
++     The standard says the parameters must all be int values.  This is
++     an historic accident and would be done differently today.  For
++     x86-64 all integer values are passed as 64-bit values and
++     therefore extending the API to copy 64-bit values instead of
++     32-bit ints makes sense.  It does not break existing
++     functionality and it does not violate the standard which says
++     that passing non-int values means undefined behavior.  */
++  for (i = 0; i < argc; ++i)
++    switch (i)
++      {
++      case 0:
++	ucp->uc_mcontext.gregs[REG_RDI] = va_arg (ap, greg_t);
++	break;
++      case 1:
++	ucp->uc_mcontext.gregs[REG_RSI] = va_arg (ap, greg_t);
++	break;
++      case 2:
++	ucp->uc_mcontext.gregs[REG_RDX] = va_arg (ap, greg_t);
++	break;
++      case 3:
++	ucp->uc_mcontext.gregs[REG_RCX] = va_arg (ap, greg_t);
++	break;
++      case 4:
++	ucp->uc_mcontext.gregs[REG_R8] = va_arg (ap, greg_t);
++	break;
++      case 5:
++	ucp->uc_mcontext.gregs[REG_R9] = va_arg (ap, greg_t);
++	break;
++      default:
++	/* Put value on stack.  */
++	sp[i - 5] = va_arg (ap, greg_t);
++	break;
++      }
++  va_end (ap);
+ 
+-static void
+-makectx_wrapper(ucontext_t *ucp, func_t func, uint64_t *args)
+-{
+-	(*func)(args[0], args[1], args[2], args[3], args[4], args[5]);
+-	if (ucp->uc_link == NULL)
+-		exit(0);
+-	setcontext((const ucontext_t *)ucp->uc_link);
+-	/* should never get here */
+-	abort();
+-	/* NOTREACHED */
+ }
++
++
++weak_alias (__makecontext, makecontext)
+diff -Naur src/lib/libc/lib/libc/amd64/gen/setcontext.S src.my/lib/libc/lib/libc/amd64/gen/setcontext.S
+--- src/lib/libc/lib/libc/amd64/gen/setcontext.S	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/setcontext.S	2021-03-11 00:27:40.484710447 +0300
+@@ -0,0 +1,201 @@
++/* Install given context.
++   Copyright (C) 2002-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Andreas Jaeger <aj@suse.de>, 2002.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#include <sysdep.h>
++/*#include <asm/prctl.h>*/
++
++#include "ucontext_i.h"
++
++
++/*  int __setcontext (const ucontext_t *ucp)
++
++  Restores the machine context in UCP and thereby resumes execution
++  in that context.
++
++  This implementation is intended to be used for *synchronous* context
++  switches only.  Therefore, it does not have to restore anything
++  other than the PRESERVED state.  */
++
++ENTRY(__setcontext)
++	/* Save argument since syscall will destroy it.  */
++	pushq	%rdi
++	cfi_adjust_cfa_offset(8)
++
++#if 0
++	/* Set the signal mask with
++	   rt_sigprocmask (SIG_SETMASK, mask, NULL, _NSIG/8).  */
++	leaq	oSIGMASK(%rdi), %rsi
++	xorl	%edx, %edx
++	movl	$SIG_SETMASK, %edi
++	movl	$_NSIG8,%r10d
++	movl	$__NR_rt_sigprocmask, %eax
++	syscall
++#endif
++	/* Pop the pointer into RDX. The choice is arbitrary, but
++	   leaving RDI and RSI available for use later can avoid
++	   shuffling values.  */
++	popq	%rdx
++	cfi_adjust_cfa_offset(-8)
++#if 0
++	cmpq	$-4095, %rax		/* Check %rax for error.  */
++	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
++#endif
++	/* Restore the floating-point context.  Not the registers, only the
++	   rest.  */
++	movq	oFPREGS(%rdx), %rcx
++	fldenv	(%rcx)
++	ldmxcsr oMXCSR(%rdx)
++
++
++	/* Load the new stack pointer, the preserved registers and
++	   registers used for passing args.  */
++	cfi_def_cfa(%rdx, 0)
++	cfi_offset(%rbx,oRBX)
++	cfi_offset(%rbp,oRBP)
++	cfi_offset(%r12,oR12)
++	cfi_offset(%r13,oR13)
++	cfi_offset(%r14,oR14)
++	cfi_offset(%r15,oR15)
++	cfi_offset(%rsp,oRSP)
++	cfi_offset(%rip,oRIP)
++
++	movq	oRSP(%rdx), %rsp
++	movq	oRBX(%rdx), %rbx
++	movq	oRBP(%rdx), %rbp
++	movq	oR12(%rdx), %r12
++	movq	oR13(%rdx), %r13
++	movq	oR14(%rdx), %r14
++	movq	oR15(%rdx), %r15
++
++#if SHSTK_ENABLED
++	/* Check if shadow stack is enabled.  */
++	testl	$X86_FEATURE_1_SHSTK, %fs:FEATURE_1_OFFSET
++	jz	L(no_shstk)
++
++	/* If the base of the target shadow stack is the same as the
++	   base of the current shadow stack, we unwind the shadow
++	   stack.  Otherwise it is a stack switch and we look for a
++	   restore token.  */
++	movq	oSSP(%rdx), %rsi
++	movq	%rsi, %rdi
++
++	/* Get the base of the target shadow stack.  */
++	movq	(oSSP + 8)(%rdx), %rcx
++	cmpq	%fs:SSP_BASE_OFFSET, %rcx
++	je	L(unwind_shadow_stack)
++
++L(find_restore_token_loop):
++	/* Look for a restore token.  */
++	movq	-8(%rsi), %rax
++	andq	$-8, %rax
++	cmpq	%rsi, %rax
++	je	L(restore_shadow_stack)
++
++	/* Try the next slot.  */
++	subq	$8, %rsi
++	jmp	L(find_restore_token_loop)
++
++L(restore_shadow_stack):
++	/* Pop return address from the shadow stack since setcontext
++	   will not return.  */
++	movq	$1, %rax
++	incsspq	%rax
++
++	/* Use the restore stoken to restore the target shadow stack.  */
++	rstorssp -8(%rsi)
++
++	/* Save the restore token on the old shadow stack.  NB: This
++	   restore token may be checked by setcontext or swapcontext
++	   later.  */
++	saveprevssp
++
++	/* Record the new shadow stack base that was switched to.  */
++	movq	(oSSP + 8)(%rdx), %rax
++	movq	%rax, %fs:SSP_BASE_OFFSET
++
++L(unwind_shadow_stack):
++	rdsspq	%rcx
++	subq	%rdi, %rcx
++	je	L(skip_unwind_shadow_stack)
++	negq	%rcx
++	shrq	$3, %rcx
++	movl	$255, %esi
++L(loop):
++	cmpq	%rsi, %rcx
++	cmovb	%rcx, %rsi
++	incsspq	%rsi
++	subq	%rsi, %rcx
++	ja	L(loop)
++
++L(skip_unwind_shadow_stack):
++	movq	oRSI(%rdx), %rsi
++	movq	oRDI(%rdx), %rdi
++	movq	oRCX(%rdx), %rcx
++	movq	oR8(%rdx), %r8
++	movq	oR9(%rdx), %r9
++
++	/* Get the return address set with getcontext.  */
++	movq	oRIP(%rdx), %r10
++
++	/* Setup finally %rdx.  */
++	movq	oRDX(%rdx), %rdx
++
++	/* Check if return address is valid for the case when setcontext
++	   is invoked from __start_context with linked context.  */
++	rdsspq	%rax
++	cmpq	(%rax), %r10
++	/* Clear RAX to indicate success.  NB: Don't use xorl to keep
++	   EFLAGS for jne.  */
++	movl	$0, %eax
++	jne	L(jmp)
++	/* Return to the new context if return address valid.  */
++	pushq	%r10
++	ret
++
++L(jmp):
++	/* Jump to the new context directly.  */
++	jmp	*%r10
++
++L(no_shstk):
++#endif
++	/* The following ret should return to the address set with
++	getcontext.  Therefore push the address on the stack.  */
++	movq	oRIP(%rdx), %rcx
++	pushq	%rcx
++
++	movq	oRSI(%rdx), %rsi
++	movq	oRDI(%rdx), %rdi
++	movq	oRCX(%rdx), %rcx
++	movq	oR8(%rdx), %r8
++	movq	oR9(%rdx), %r9
++
++	/* Setup finally %rdx.  */
++	movq	oRDX(%rdx), %rdx
++
++	/* End FDE here, we fall into another context.  */
++	cfi_endproc
++	cfi_startproc
++
++	/* Clear rax to indicate success.  */
++	xorl	%eax, %eax
++	ret
++PSEUDO_END(__setcontext)
++
++weak_alias (__setcontext, setcontext)
++weak_alias (__setcontext, __sys_setcontext)
+diff -Naur src/lib/libc/lib/libc/amd64/gen/swapcontext.S src.my/lib/libc/lib/libc/amd64/gen/swapcontext.S
+--- src/lib/libc/lib/libc/amd64/gen/swapcontext.S	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/swapcontext.S	2021-03-11 00:27:40.484710447 +0300
+@@ -0,0 +1,256 @@
++/* Save current context and install the given one.
++   Copyright (C) 2002-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Andreas Jaeger <aj@suse.de>, 2002.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#include <sysdep.h>
++/*#include <asm/prctl.h>*/
++
++#include "ucontext_i.h"
++
++
++/* int __swapcontext (ucontext_t *oucp, const ucontext_t *ucp);
++
++  Saves the machine context in oucp such that when it is activated,
++  it appears as if __swapcontextt() returned again, restores the
++  machine context in ucp and thereby resumes execution in that
++  context.
++
++  This implementation is intended to be used for *synchronous* context
++  switches only.  Therefore, it does not have to save anything
++  other than the PRESERVED state.  */
++
++ENTRY(__swapcontext)
++	/* Save the preserved registers, the registers used for passing args,
++	   and the return address.  */
++	movq	%rbx, oRBX(%rdi)
++	movq	%rbp, oRBP(%rdi)
++	movq	%r12, oR12(%rdi)
++	movq	%r13, oR13(%rdi)
++	movq	%r14, oR14(%rdi)
++	movq	%r15, oR15(%rdi)
++
++	movq	%rdi, oRDI(%rdi)
++	movq	%rsi, oRSI(%rdi)
++	movq	%rdx, oRDX(%rdi)
++	movq	%rcx, oRCX(%rdi)
++	movq	%r8, oR8(%rdi)
++	movq	%r9, oR9(%rdi)
++
++	movq	(%rsp), %rcx
++	movq	%rcx, oRIP(%rdi)
++	leaq	8(%rsp), %rcx		/* Exclude the return address.  */
++	movq	%rcx, oRSP(%rdi)
++
++	/* We have separate floating-point register content memory on the
++	   stack.  We use the __fpregs_mem block in the context.  Set the
++	   links up correctly.  */
++	leaq	oFPREGSMEM(%rdi), %rcx
++	movq	%rcx, oFPREGS(%rdi)
++	/* Save the floating-point environment.  */
++	fnstenv	(%rcx)
++	stmxcsr oMXCSR(%rdi)
++
++
++#if 0
++	/* The syscall destroys some registers, save them.  */
++	movq	%rsi, %r12
++	movq	%rdi, %r9
++	/* Save the current signal mask and install the new one with
++	   rt_sigprocmask (SIG_BLOCK, newset, oldset,_NSIG/8).  */
++	leaq	oSIGMASK(%rdi), %rdx
++	leaq	oSIGMASK(%rsi), %rsi
++	movl	$SIG_SETMASK, %edi
++	movl	$_NSIG8,%r10d
++	movl	$__NR_rt_sigprocmask, %eax
++	syscall
++	cmpq	$-4095, %rax		/* Check %rax for error.  */
++	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
++
++	/* Restore destroyed register into RDX. The choice is arbitrary,
++	   but leaving RDI and RSI available for use later can avoid
++	   shuffling values.  */
++	movq	%r12, %rdx
++#else
++	/* move second parameter address to rdx to keep compliance with original */
++	movq	%rsi, %rdx
++#endif
++
++	/* Restore the floating-point context.  Not the registers, only the
++	   rest.  */
++	movq	oFPREGS(%rdx), %rcx
++	fldenv	(%rcx)
++	ldmxcsr oMXCSR(%rdx)
++
++	/* Load the new stack pointer and the preserved registers.  */
++	movq	oRSP(%rdx), %rsp
++	movq	oRBX(%rdx), %rbx
++	movq	oRBP(%rdx), %rbp
++	movq	oR12(%rdx), %r12
++	movq	oR13(%rdx), %r13
++	movq	oR14(%rdx), %r14
++	movq	oR15(%rdx), %r15
++
++#if SHSTK_ENABLED_
++	/* Check if shadow stack is enabled.  */
++	testl	$X86_FEATURE_1_SHSTK, %fs:FEATURE_1_OFFSET
++	jz	L(no_shstk)
++
++	xorl	%eax, %eax
++	cmpq	%fs:SSP_BASE_OFFSET, %rax
++	jnz	L(shadow_stack_bound_recorded)
++
++	/* Get the base address and size of the default shadow stack
++	   which must be the current shadow stack since nothing has
++	   been recorded yet.  */
++	sub	$24, %RSP_LP
++	mov	%RSP_LP, %RSI_LP
++	movl	$ARCH_CET_STATUS, %edi
++	movl	$__NR_arch_prctl, %eax
++	syscall
++	testq	%rax, %rax
++	jz	L(continue_no_err)
++
++	/* This should never happen.  */
++	hlt
++
++L(continue_no_err):
++	/* Record the base of the current shadow stack.  */
++	movq	8(%rsp), %rax
++	movq	%rax, %fs:SSP_BASE_OFFSET
++	add	$24, %RSP_LP
++
++L(shadow_stack_bound_recorded):
++        /* If we unwind the stack, we can't undo stack unwinding.  Just
++	   save the target shadow stack pointer as the current shadow
++	   stack pointer.   */
++	movq	oSSP(%rdx), %rcx
++	movq	%rcx, oSSP(%r9)
++
++	/* Save the base of the current shadow stack.  */
++	movq	%fs:SSP_BASE_OFFSET, %rax
++	movq	%rax, (oSSP + 8)(%r9)
++
++	/* If the base of the target shadow stack is the same as the
++	   base of the current shadow stack, we unwind the shadow
++	   stack.  Otherwise it is a stack switch and we look for a
++	   restore token.  */
++	movq	oSSP(%rdx), %rsi
++	movq	%rsi, %rdi
++
++	/* Get the base of the target shadow stack.  */
++	movq	(oSSP + 8)(%rdx), %rcx
++	cmpq	%fs:SSP_BASE_OFFSET, %rcx
++	je	L(unwind_shadow_stack)
++
++L(find_restore_token_loop):
++	/* Look for a restore token.  */
++	movq	-8(%rsi), %rax
++	andq	$-8, %rax
++	cmpq	%rsi, %rax
++	je	L(restore_shadow_stack)
++
++	/* Try the next slot.  */
++	subq	$8, %rsi
++	jmp	L(find_restore_token_loop)
++
++L(restore_shadow_stack):
++        /* The target shadow stack will be restored.  Save the current
++	   shadow stack pointer.  */
++	rdsspq	%rcx
++	movq	%rcx, oSSP(%r9)
++
++	/* Restore the target shadow stack.  */
++	rstorssp -8(%rsi)
++
++	/* Save the restore token on the old shadow stack.  NB: This
++	   restore token may be checked by setcontext or swapcontext
++	   later.  */
++	saveprevssp
++
++	/* Record the new shadow stack base that was switched to.   */
++	movq	(oSSP + 8)(%rdx), %rax
++	movq	%rax, %fs:SSP_BASE_OFFSET
++
++L(unwind_shadow_stack):
++	rdsspq	%rcx
++	subq	%rdi, %rcx
++	je	L(skip_unwind_shadow_stack)
++	negq	%rcx
++	shrq	$3, %rcx
++	movl	$255, %esi
++L(loop):
++	cmpq	%rsi, %rcx
++	cmovb	%rcx, %rsi
++	incsspq	%rsi
++	subq	%rsi, %rcx
++	ja	L(loop)
++
++L(skip_unwind_shadow_stack):
++	/* Setup registers used for passing args.  */
++	movq	oRDI(%rdx), %rdi
++	movq	oRSI(%rdx), %rsi
++	movq	oRCX(%rdx), %rcx
++	movq	oR8(%rdx), %r8
++	movq	oR9(%rdx), %r9
++
++	/* Get the return address set with getcontext.  */
++	movq	oRIP(%rdx), %r10
++
++	/* Setup finally %rdx.  */
++	movq	oRDX(%rdx), %rdx
++
++	/* Check if return address is valid for the case when setcontext
++	   is invoked from __start_context with linked context.  */
++	rdsspq	%rax
++	cmpq	(%rax), %r10
++	/* Clear rax to indicate success.  NB: Don't use xorl to keep
++	   EFLAGS for jne.  */
++	movl	$0, %eax
++	jne	L(jmp)
++	/* Return to the new context if return address valid.  */
++	pushq	%r10
++	ret
++
++L(jmp):
++	/* Jump to the new context directly.  */
++	jmp	*%r10
++
++L(no_shstk):
++#endif
++	/* The following ret should return to the address set with
++	getcontext.  Therefore push the address on the stack.  */
++	movq	oRIP(%rdx), %rcx
++	pushq	%rcx
++
++	/* Setup registers used for passing args.  */
++	movq	oRDI(%rdx), %rdi
++	movq	oRSI(%rdx), %rsi
++	movq	oRCX(%rdx), %rcx
++	movq	oR8(%rdx), %r8
++	movq	oR9(%rdx), %r9
++
++	/* Setup finally %rdx.  */
++	movq	oRDX(%rdx), %rdx
++
++	/* Clear rax to indicate success.  */
++	xorl	%eax, %eax
++	ret
++PSEUDO_END(__swapcontext)
++
++weak_alias (__swapcontext, swapcontext)
++weak_alias (__swapcontext, __sys_swapcontext)
+diff -Naur src/lib/libc/lib/libc/amd64/gen/ucontext_i.h src.my/lib/libc/lib/libc/amd64/gen/ucontext_i.h
+--- src/lib/libc/lib/libc/amd64/gen/ucontext_i.h	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/gen/ucontext_i.h	2021-03-11 13:32:20.743088999 +0300
+@@ -0,0 +1,28 @@
++#include <libc-symbols.h>
++/* generated by gensym_h script from glibc */
++#define SIG_BLOCK 1
++#define SIG_SETMASK 3
++#define _NSIG8 4
++#define oEFL 176
++#define oFPREGS 224
++#define oFPREGSMEM 312
++#define oMXCSR 336
++#define oR10 56
++#define oR11 64
++#define oR12 72
++#define oR13 80
++#define oR14 88
++#define oR15 96
++#define oR8 40
++#define oR9 48
++#define oRAX 144
++#define oRBP 120
++#define oRBX 128
++#define oRCX 152
++#define oRDI 104
++#define oRDX 136
++#define oRIP 168
++#define oRSI 112
++#define oRSP 160
++#define oSIGMASK 296
++#define oSSP 824
+diff -Naur src/lib/libc/lib/libc/amd64/sys/getcontext.S src.my/lib/libc/lib/libc/amd64/sys/getcontext.S
+--- src/lib/libc/lib/libc/amd64/sys/getcontext.S	2018-12-07 03:01:45.000000000 +0300
++++ src.my/lib/libc/lib/libc/amd64/sys/getcontext.S	1970-01-01 03:00:00.000000000 +0300
+@@ -1,48 +0,0 @@
+-/*-
+- * Copyright (c) 2003 Peter Wemm <peter@FreeBSD.org>
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+- * SUCH DAMAGE.
+- */
+-
+-#include <machine/asm.h>
+-__FBSDID("$FreeBSD: releng/12.0/lib/libc/amd64/sys/getcontext.S 258447 2013-11-21 21:25:58Z andreast $");
+-
+-#include <SYS.h>
+-
+-/*
+- * This has to be magic to handle the multiple returns.
+- * Otherwise, the setcontext() syscall will return here and we'll
+- * pop off the return address and go to the *setcontext* call.
+- */
+-	WEAK_REFERENCE(__sys_getcontext, _getcontext)
+-	WEAK_REFERENCE(__sys_getcontext, getcontext)
+-ENTRY(__sys_getcontext)
+-	movq	(%rsp),%rsi	/* save getcontext return address */
+-	mov	$SYS_getcontext,%rax
+-	KERNCALL
+-	jb	HIDENAME(cerror)
+-	addq	$8,%rsp		/* remove stale (setcontext) return address */
+-	jmp	*%rsi		/* restore return address */
+-END(__sys_getcontext)
+-
+-	.section .note.GNU-stack,"",%progbits
+diff -Naur src/lib/libc/lib/libc/include/sysdeps/generic/sysdep.h src.my/lib/libc/lib/libc/include/sysdeps/generic/sysdep.h
+--- src/lib/libc/lib/libc/include/sysdeps/generic/sysdep.h	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/include/sysdeps/generic/sysdep.h	2021-03-10 18:35:58.996436218 +0300
+@@ -0,0 +1,97 @@
++/* Generic asm macros used on many machines.
++   Copyright (C) 1991-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef C_LABEL
++
++/* Define a macro we can use to construct the asm name for a C symbol.  */
++# define C_LABEL(name)	name##:
++
++#endif
++
++#ifdef __ASSEMBLER__
++/* Mark the end of function named SYM.  This is used on some platforms
++   to generate correct debugging information.  */
++# ifndef END
++#  define END(sym)
++# endif
++
++# ifndef JUMPTARGET
++#  define JUMPTARGET(sym)	sym
++# endif
++#endif
++
++/* Makros to generate eh_frame unwind information.  */
++#ifdef __ASSEMBLER__
++# define cfi_startproc			.cfi_startproc
++# define cfi_endproc			.cfi_endproc
++# define cfi_def_cfa(reg, off)		.cfi_def_cfa reg, off
++# define cfi_def_cfa_register(reg)	.cfi_def_cfa_register reg
++# define cfi_def_cfa_offset(off)	.cfi_def_cfa_offset off
++# define cfi_adjust_cfa_offset(off)	.cfi_adjust_cfa_offset off
++# define cfi_offset(reg, off)		.cfi_offset reg, off
++# define cfi_rel_offset(reg, off)	.cfi_rel_offset reg, off
++# define cfi_register(r1, r2)		.cfi_register r1, r2
++# define cfi_return_column(reg)	.cfi_return_column reg
++# define cfi_restore(reg)		.cfi_restore reg
++# define cfi_same_value(reg)		.cfi_same_value reg
++# define cfi_undefined(reg)		.cfi_undefined reg
++# define cfi_remember_state		.cfi_remember_state
++# define cfi_restore_state		.cfi_restore_state
++# define cfi_window_save		.cfi_window_save
++# define cfi_personality(enc, exp)	.cfi_personality enc, exp
++# define cfi_lsda(enc, exp)		.cfi_lsda enc, exp
++
++#else /* ! ASSEMBLER */
++
++# define CFI_STRINGIFY(Name) CFI_STRINGIFY2 (Name)
++# define CFI_STRINGIFY2(Name) #Name
++# define CFI_STARTPROC	".cfi_startproc"
++# define CFI_ENDPROC	".cfi_endproc"
++# define CFI_DEF_CFA(reg, off)	\
++   ".cfi_def_cfa " CFI_STRINGIFY(reg) "," CFI_STRINGIFY(off)
++# define CFI_DEF_CFA_REGISTER(reg) \
++   ".cfi_def_cfa_register " CFI_STRINGIFY(reg)
++# define CFI_DEF_CFA_OFFSET(off) \
++   ".cfi_def_cfa_offset " CFI_STRINGIFY(off)
++# define CFI_ADJUST_CFA_OFFSET(off) \
++   ".cfi_adjust_cfa_offset " CFI_STRINGIFY(off)
++# define CFI_OFFSET(reg, off) \
++   ".cfi_offset " CFI_STRINGIFY(reg) "," CFI_STRINGIFY(off)
++# define CFI_REL_OFFSET(reg, off) \
++   ".cfi_rel_offset " CFI_STRINGIFY(reg) "," CFI_STRINGIFY(off)
++# define CFI_REGISTER(r1, r2) \
++   ".cfi_register " CFI_STRINGIFY(r1) "," CFI_STRINGIFY(r2)
++# define CFI_RETURN_COLUMN(reg) \
++   ".cfi_return_column " CFI_STRINGIFY(reg)
++# define CFI_RESTORE(reg) \
++   ".cfi_restore " CFI_STRINGIFY(reg)
++# define CFI_UNDEFINED(reg) \
++   ".cfi_undefined " CFI_STRINGIFY(reg)
++# define CFI_REMEMBER_STATE \
++   ".cfi_remember_state"
++# define CFI_RESTORE_STATE \
++   ".cfi_restore_state"
++# define CFI_WINDOW_SAVE \
++   ".cfi_window_save"
++# define CFI_PERSONALITY(enc, exp) \
++   ".cfi_personality " CFI_STRINGIFY(enc) "," CFI_STRINGIFY(exp)
++# define CFI_LSDA(enc, exp) \
++   ".cfi_lsda " CFI_STRINGIFY(enc) "," CFI_STRINGIFY(exp)
++#endif
++
++#include "dwarf2.h"
+diff -Naur src/lib/libc/lib/libc/include/sysdeps/x86/sysdep.h src.my/lib/libc/lib/libc/include/sysdeps/x86/sysdep.h
+--- src/lib/libc/lib/libc/include/sysdeps/x86/sysdep.h	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/include/sysdeps/x86/sysdep.h	2021-03-10 21:42:43.484078909 +0300
+@@ -0,0 +1,113 @@
++/* Assembler macros for x86.
++   Copyright (C) 2017-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef _X86_SYSDEP_H
++#define _X86_SYSDEP_H 1
++
++#include <sysdeps/generic/sysdep.h>
++
++/* __CET__ is defined by GCC with Control-Flow Protection values:
++
++enum cf_protection_level
++{
++  CF_NONE = 0,
++  CF_BRANCH = 1 << 0,
++  CF_RETURN = 1 << 1,
++  CF_FULL = CF_BRANCH | CF_RETURN,
++  CF_SET = 1 << 2
++};
++*/
++
++/* Set if CF_BRANCH (IBT) is enabled.  */
++#define X86_FEATURE_1_IBT	(1U << 0)
++/* Set if CF_RETURN (SHSTK) is enabled.  */
++#define X86_FEATURE_1_SHSTK	(1U << 1)
++
++#ifdef __CET__
++# define CET_ENABLED	1
++# define IBT_ENABLED	(__CET__ & X86_FEATURE_1_IBT)
++# define SHSTK_ENABLED	(__CET__ & X86_FEATURE_1_SHSTK)
++#else
++# define CET_ENABLED	0
++# define IBT_ENABLED	0
++# define SHSTK_ENABLED	0
++#endif
++
++/* Offset for fxsave/xsave area used by _dl_runtime_resolve.  Also need
++   space to preserve RCX, RDX, RSI, RDI, R8, R9 and RAX.  It must be
++   aligned to 16 bytes for fxsave and 64 bytes for xsave.  */
++#define STATE_SAVE_OFFSET (8 * 7 + 8)
++
++/* Save SSE, AVX, AVX512, mask and bound registers.  */
++#define STATE_SAVE_MASK \
++  ((1 << 1) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7))
++
++#ifdef	__ASSEMBLER__
++
++/* Syntactic details of assembler.  */
++
++#ifdef _CET_ENDBR
++# define _CET_NOTRACK notrack
++#else
++# define _CET_ENDBR
++# define _CET_NOTRACK
++#endif
++
++/* ELF uses byte-counts for .align, most others use log2 of count of bytes.  */
++#define ALIGNARG(log2) 1<<log2
++#define ASM_SIZE_DIRECTIVE(name) .size name,.-name;
++
++/* Define an entry point visible from C.  */
++#define	ENTRY(name)							      \
++  .globl C_SYMBOL_NAME(name);						      \
++  .type C_SYMBOL_NAME(name),@function;					      \
++  .align ALIGNARG(4);							      \
++  C_LABEL(name)								      \
++  cfi_startproc;							      \
++  _CET_ENDBR;								      \
++  CALL_MCOUNT
++
++#undef	END
++#define END(name)							      \
++  cfi_endproc;								      \
++  ASM_SIZE_DIRECTIVE(name)
++
++#define ENTRY_CHK(name) ENTRY (name)
++#define END_CHK(name) END (name)
++
++/* Since C identifiers are not normally prefixed with an underscore
++   on this system, the asm identifier `syscall_error' intrudes on the
++   C name space.  Make sure we use an innocuous name.  */
++#define	syscall_error	__syscall_error
++#define mcount		_mcount
++
++#undef	PSEUDO_END
++#define	PSEUDO_END(name)						      \
++  END (name)
++
++/* Local label name for asm code. */
++#ifndef L
++/* ELF-like local names start with `.L'.  */
++# define L(name)	.L##name
++#endif
++
++#define atom_text_section .section ".text.atom", "ax"
++
++#endif	/* __ASSEMBLER__ */
++
++#endif	/* _X86_SYSDEP_H */
+diff -Naur src/lib/libc/lib/libc/include/sysdeps/x86_64/sysdep.h src.my/lib/libc/lib/libc/include/sysdeps/x86_64/sysdep.h
+--- src/lib/libc/lib/libc/include/sysdeps/x86_64/sysdep.h	1970-01-01 03:00:00.000000000 +0300
++++ src.my/lib/libc/lib/libc/include/sysdeps/x86_64/sysdep.h	2021-03-10 18:35:38.205211265 +0300
+@@ -0,0 +1,129 @@
++/* Assembler macros for x86-64.
++   Copyright (C) 2001-2021 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++
++#ifndef _X86_64_SYSDEP_H
++#define _X86_64_SYSDEP_H 1
++
++#include <sysdeps/x86/sysdep.h>
++
++#ifdef	__ASSEMBLER__
++
++/* Syntactic details of assembler.  */
++
++/* This macro is for setting proper CFI with DW_CFA_expression describing
++   the register as saved relative to %rsp instead of relative to the CFA.
++   Expression is DW_OP_drop, DW_OP_breg7 (%rsp is register 7), sleb128 offset
++   from %rsp.  */
++#define cfi_offset_rel_rsp(regn, off)	.cfi_escape 0x10, regn, 0x4, 0x13, \
++					0x77, off & 0x7F | 0x80, off >> 7
++
++/* If compiled for profiling, call `mcount' at the start of each function.  */
++#ifdef	PROF
++/* The mcount code relies on a normal frame pointer being on the stack
++   to locate our caller, so push one just for its benefit.  */
++#define CALL_MCOUNT                                                          \
++  pushq %rbp;                                                                \
++  cfi_adjust_cfa_offset(8);                                                  \
++  movq %rsp, %rbp;                                                           \
++  cfi_def_cfa_register(%rbp);                                                \
++  call JUMPTARGET(mcount);                                                   \
++  popq %rbp;                                                                 \
++  cfi_def_cfa(rsp,8);
++#else
++#define CALL_MCOUNT		/* Do nothing.  */
++#endif
++
++#define	PSEUDO(name, syscall_name, args)				      \
++lose:									      \
++  jmp JUMPTARGET(syscall_error)						      \
++  .globl syscall_error;							      \
++  ENTRY (name)								      \
++  DO_CALL (syscall_name, args);						      \
++  jb lose
++
++#undef JUMPTARGET
++#ifdef SHARED
++# ifdef BIND_NOW
++#  define JUMPTARGET(name)	*name##@GOTPCREL(%rip)
++# else
++#  define JUMPTARGET(name)	name##@PLT
++# endif
++#else
++/* For static archives, branch to target directly.  */
++# define JUMPTARGET(name)	name
++#endif
++
++/* Long and pointer size in bytes.  */
++#define LP_SIZE	8
++
++/* Instruction to operate on long and pointer.  */
++#define LP_OP(insn) insn##q
++
++/* Assembler address directive. */
++#define ASM_ADDR .quad
++
++/* Registers to hold long and pointer.  */
++#define RAX_LP	rax
++#define RBP_LP	rbp
++#define RBX_LP	rbx
++#define RCX_LP	rcx
++#define RDI_LP	rdi
++#define RDX_LP	rdx
++#define RSI_LP	rsi
++#define RSP_LP	rsp
++#define R8_LP	r8
++#define R9_LP	r9
++#define R10_LP	r10
++#define R11_LP	r11
++#define R12_LP	r12
++#define R13_LP	r13
++#define R14_LP	r14
++#define R15_LP	r15
++
++#else	/* __ASSEMBLER__ */
++
++/* Long and pointer size in bytes.  */
++#define LP_SIZE "8"
++
++/* Instruction to operate on long and pointer.  */
++#define LP_OP(insn) #insn "q"
++
++/* Assembler address directive. */
++#define ASM_ADDR ".quad"
++
++/* Registers to hold long and pointer.  */
++#define RAX_LP	"rax"
++#define RBP_LP	"rbp"
++#define RBX_LP	"rbx"
++#define RCX_LP	"rcx"
++#define RDI_LP	"rdi"
++#define RDX_LP	"rdx"
++#define RSI_LP	"rsi"
++#define RSP_LP	"rsp"
++#define R8_LP	"r8"
++#define R9_LP	"r9"
++#define R10_LP	"r10"
++#define R11_LP	"r11"
++#define R12_LP	"r12"
++#define R13_LP	"r13"
++#define R14_LP	"r14"
++#define R15_LP	"r15"
++
++#endif	/* __ASSEMBLER__ */
++
++#endif	/* _X86_64_SYSDEP_H */
+diff -Naur src/lib/libc/sys/x86/include/ucontext.h src.my/lib/libc/sys/x86/include/ucontext.h
+--- src/lib/libc/sys/x86/include/ucontext.h	2018-12-07 03:02:06.000000000 +0300
++++ src.my/lib/libc/sys/x86/include/ucontext.h	1970-01-01 03:00:00.000000000 +0300
+@@ -1,167 +0,0 @@
+-/*-
+- * SPDX-License-Identifier: BSD-3-Clause
+- *
+- * Copyright (c) 2003 Peter Wemm
+- * Copyright (c) 1999 Marcel Moolenaar
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer 
+- *    in this position and unchanged.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- * 3. The name of the author may not be used to endorse or promote products
+- *    derived from this software without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- *
+- * $FreeBSD: releng/12.0/sys/x86/include/ucontext.h 331215 2018-03-19 17:14:56Z jhb $
+- */
+-
+-#ifndef _X86_UCONTEXT_H_
+-#define	_X86_UCONTEXT_H_
+-
+-#ifdef __i386__
+-/* Keep _MC_* values similar to amd64 */
+-#define	_MC_HASSEGS	0x1
+-#define	_MC_HASBASES	0x2
+-#define	_MC_HASFPXSTATE	0x4
+-#define	_MC_FLAG_MASK	(_MC_HASSEGS | _MC_HASBASES | _MC_HASFPXSTATE)
+-
+-typedef struct __mcontext {
+-	/*
+-	 * The definition of mcontext_t must match the layout of
+-	 * struct sigcontext after the sc_mask member.  This is so
+-	 * that we can support sigcontext and ucontext_t at the same
+-	 * time.
+-	 */
+-	__register_t	mc_onstack;	/* XXX - sigcontext compat. */
+-	__register_t	mc_gs;		/* machine state (struct trapframe) */
+-	__register_t	mc_fs;
+-	__register_t	mc_es;
+-	__register_t	mc_ds;
+-	__register_t	mc_edi;
+-	__register_t	mc_esi;
+-	__register_t	mc_ebp;
+-	__register_t	mc_isp;
+-	__register_t	mc_ebx;
+-	__register_t	mc_edx;
+-	__register_t	mc_ecx;
+-	__register_t	mc_eax;
+-	__register_t	mc_trapno;
+-	__register_t	mc_err;
+-	__register_t	mc_eip;
+-	__register_t	mc_cs;
+-	__register_t	mc_eflags;
+-	__register_t	mc_esp;
+-	__register_t	mc_ss;
+-
+-	int	mc_len;			/* sizeof(mcontext_t) */
+-#define	_MC_FPFMT_NODEV		0x10000	/* device not present or configured */
+-#define	_MC_FPFMT_387		0x10001
+-#define	_MC_FPFMT_XMM		0x10002
+-	int	mc_fpformat;
+-#define	_MC_FPOWNED_NONE	0x20000	/* FP state not used */
+-#define	_MC_FPOWNED_FPU		0x20001	/* FP state came from FPU */
+-#define	_MC_FPOWNED_PCB		0x20002	/* FP state came from PCB */
+-	int	mc_ownedfp;
+-	__register_t mc_flags;
+-	/*
+-	 * See <machine/npx.h> for the internals of mc_fpstate[].
+-	 */
+-	int	mc_fpstate[128] __aligned(16);
+-
+-	__register_t mc_fsbase;
+-	__register_t mc_gsbase;
+-
+-	__register_t mc_xfpustate;
+-	__register_t mc_xfpustate_len;
+-
+-	int	mc_spare2[4];
+-} mcontext_t;
+-#endif /* __i386__ */
+-
+-#ifdef __amd64__
+-/*
+- * mc_flags bits. Shall be in sync with TF_XXX.
+- */
+-#define	_MC_HASSEGS	0x1
+-#define	_MC_HASBASES	0x2
+-#define	_MC_HASFPXSTATE	0x4
+-#define	_MC_FLAG_MASK	(_MC_HASSEGS | _MC_HASBASES | _MC_HASFPXSTATE)
+-
+-typedef struct __mcontext {
+-	/*
+-	 * The definition of mcontext_t must match the layout of
+-	 * struct sigcontext after the sc_mask member.  This is so
+-	 * that we can support sigcontext and ucontext_t at the same
+-	 * time.
+-	 */
+-	__register_t	mc_onstack;	/* XXX - sigcontext compat. */
+-	__register_t	mc_rdi;		/* machine state (struct trapframe) */
+-	__register_t	mc_rsi;
+-	__register_t	mc_rdx;
+-	__register_t	mc_rcx;
+-	__register_t	mc_r8;
+-	__register_t	mc_r9;
+-	__register_t	mc_rax;
+-	__register_t	mc_rbx;
+-	__register_t	mc_rbp;
+-	__register_t	mc_r10;
+-	__register_t	mc_r11;
+-	__register_t	mc_r12;
+-	__register_t	mc_r13;
+-	__register_t	mc_r14;
+-	__register_t	mc_r15;
+-	__uint32_t	mc_trapno;
+-	__uint16_t	mc_fs;
+-	__uint16_t	mc_gs;
+-	__register_t	mc_addr;
+-	__uint32_t	mc_flags;
+-	__uint16_t	mc_es;
+-	__uint16_t	mc_ds;
+-	__register_t	mc_err;
+-	__register_t	mc_rip;
+-	__register_t	mc_cs;
+-	__register_t	mc_rflags;
+-	__register_t	mc_rsp;
+-	__register_t	mc_ss;
+-
+-	long	mc_len;			/* sizeof(mcontext_t) */
+-
+-#define	_MC_FPFMT_NODEV		0x10000	/* device not present or configured */
+-#define	_MC_FPFMT_XMM		0x10002
+-	long	mc_fpformat;
+-#define	_MC_FPOWNED_NONE	0x20000	/* FP state not used */
+-#define	_MC_FPOWNED_FPU		0x20001	/* FP state came from FPU */
+-#define	_MC_FPOWNED_PCB		0x20002	/* FP state came from PCB */
+-	long	mc_ownedfp;
+-	/*
+-	 * See <machine/fpu.h> for the internals of mc_fpstate[].
+-	 */
+-	long	mc_fpstate[64] __aligned(16);
+-
+-	__register_t	mc_fsbase;
+-	__register_t	mc_gsbase;
+-
+-	__register_t	mc_xfpustate;
+-	__register_t	mc_xfpustate_len;
+-
+-	long	mc_spare[4];
+-} mcontext_t;
+-#endif /* __amd64__ */
+-
+-#endif /* !_X86_UCONTEXT_H_ */
+diff -Naur src/lib/libc/sys/sys/_ucontext.h src.my/lib/libc/sys/sys/_ucontext.h
+--- src/lib/libc/sys/sys/_ucontext.h	2018-12-07 03:01:59.000000000 +0300
++++ src.my/lib/libc/sys/sys/_ucontext.h	1970-01-01 03:00:00.000000000 +0300
+@@ -1,54 +0,0 @@
+-/*-
+- * SPDX-License-Identifier: BSD-3-Clause
+- *
+- * Copyright (c) 1999 Marcel Moolenaar
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer 
+- *    in this position and unchanged.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- * 3. The name of the author may not be used to endorse or promote products
+- *    derived from this software without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- *
+- * $FreeBSD: releng/12.0/sys/sys/_ucontext.h 326823 2017-12-13 16:13:17Z pfg $
+- */
+-
+-#ifndef _SYS__UCONTEXT_H_
+-#define	_SYS__UCONTEXT_H_
+-
+-typedef struct __ucontext {
+-	/*
+-	 * Keep the order of the first two fields. Also,
+-	 * keep them the first two fields in the structure.
+-	 * This way we can have a union with struct
+-	 * sigcontext and ucontext_t. This allows us to
+-	 * support them both at the same time.
+-	 * note: the union is not defined, though.
+-	 */
+-	__sigset_t	uc_sigmask;
+-	mcontext_t	uc_mcontext;
+-
+-	struct __ucontext *uc_link;
+-	struct __stack_t uc_stack;
+-	int		uc_flags;
+-	int		__spare__[4];
+-} ucontext_t;
+-
+-#endif /* _SYS__UCONTEXT_H */
+

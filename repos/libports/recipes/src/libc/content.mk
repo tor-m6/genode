@@ -16,9 +16,6 @@ src/lib/openlibm:
 src/lib/libc/target.mk: src/lib/libc
 	echo "LIBS += libc libm" > $@
 
-include/libc-plugin include/libc/sys/ucontext.h:
-	$(mirror_from_rep_dir)
-
 lib/mk:
 	mkdir -p $@
 	cp $(addprefix $(REP_DIR)/$@/,libc.mk libc-* libm.inc) $@
