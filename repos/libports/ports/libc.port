@@ -74,7 +74,7 @@ DIR_CONTENT(include/libc) := \
                 xlocale.h runetype.h)  \
     $(addprefix $(D)/sys/sys/,\
                 syslog.h fcntl.h stdint.h sched.h ktrace.h \
-                _semaphore.h ) \
+                _semaphore.h ucontext.h) \
     $(D)/sys/sys/errno.h \
     $(D)/lib/msun/src/math.h \
     $(D)/contrib/libc-vis/vis.h
@@ -136,8 +136,8 @@ DIR_CONTENT(include/libc/sys) := \
                 disklabel.h link_elf.h endian.h mount.h ucred.h dirent.h \
                 cpuset.h socket.h un.h ttydefaults.h imgact_aout.h elf32.h \
                 elf64.h elf_generic.h elf_common.h nlist_aout.h ipc.h sem.h \
-                exec.h _lock.h _mutex.h statvfs.h syslog.h times.h \
-                utsname.h elf.h mtio.h _stdint.h atomic_common.h \
+                exec.h _lock.h _mutex.h statvfs.h ucontext.h syslog.h times.h \
+                utsname.h elf.h mtio.h _stdint.h atomic_common.h _ucontext.h \
                 _cpuset.h _bitset.h bitset.h _stdarg.h _uio.h auxv.h random.h \
                 _sockaddr_storage.h termios.h _termios.h _umtx.h kerneldump.h \
                 conf.h disk_zone.h counter.h soundcard.h)
@@ -164,7 +164,7 @@ common_include_libc_arch_machine_content = \
                 _types.h endian.h _limits.h signal.h trap.h _stdint.h \
                 sysarch.h ieeefp.h frame.h vm.h \
                 cpufunc.h vmparam.h atomic.h elf.h exec.h reloc.h pmap.h \
-                setjmp.h asm.h param.h _inttypes.h _align.h \
+                ucontext.h setjmp.h asm.h param.h _inttypes.h _align.h \
                 float.h)
 
 #
