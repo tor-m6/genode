@@ -50,6 +50,7 @@ accept T
 accept4 T
 access T
 alarm T
+alloc_secondary_stack T
 alphasort T
 arc4random T
 arc4random_addrandom T
@@ -201,6 +202,7 @@ fputs T
 fputwc T
 fputws T
 fread T
+free_secondary_stack T
 free T
 freeaddrinfo T
 freebsd7___semctl W

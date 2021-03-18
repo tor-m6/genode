@@ -99,7 +99,6 @@ DUMMY(u_int32_t, 0, __default_hash, (const void *, size_t));
 DUMMY_SILENT(long  , -1, _fpathconf, (int, int))
 DUMMY(long  , -1, fpathconf, (int, int))
 DUMMY(int   , -1, freebsd7___semctl, (void))
-DUMMY(int   , -1, getcontext, (ucontext_t *))
 DUMMY_SILENT(gid_t ,  0, getegid, (void))
 DUMMY_SILENT(uid_t ,  0, geteuid, (void))
 DUMMY_SILENT(gid_t ,  0, getgid, (void))
@@ -153,12 +152,10 @@ __SYS_DUMMY(int, -1, kevent, (int, const struct kevent*, int, struct kevent *, i
 __SYS_DUMMY(void  ,   , map_stacks_exec, (void));
 __SYS_DUMMY(int   , -1, ptrace, (int, pid_t, caddr_t, int));
 __SYS_DUMMY(ssize_t, -1, sendmsg, (int s, const struct msghdr*, int));
-__SYS_DUMMY(int   , -1, setcontext, (const ucontext_t *ucp));
 __SYS_DUMMY(void	,   , spinlock_stub,   (spinlock_t *));
 __SYS_DUMMY(void	,   , spinlock,   (spinlock_t *));
 __SYS_DUMMY(void	,   , spinunlock, (spinlock_t *));
 __SYS_DUMMY(void	,   , spinunlock_stub, (spinlock_t *));
-__SYS_DUMMY(int, -1, swapcontext, (ucontext_t *, const ucontext_t *));
 __SYS_DUMMY(int, -1, system, (const char *string));
 
 
@@ -220,3 +217,28 @@ const struct res_sym __p_type_syms[] = { };
 
 } /* extern "C" */
 
+#include <base/thread.h>
+
+using namespace Genode;
+
+extern "C" void *alloc_secondary_stack(char const *name, size_t stack_size)
+{
+	Genode::Thread *myself = Genode::Thread::myself();
+	if (!myself)
+		return nullptr;
+	void *ret = myself->alloc_secondary_stack(name, stack_size);
+
+	char *c = reinterpret_cast<char *>(ret);
+	/* stack top is cleared by ABI-specific init_stack() */
+	Genode::memset(c - stack_size, 0, stack_size);
+
+	return (void *)(c - stack_size);
+}
+
+extern "C" void free_secondary_stack(void *stack)
+{
+	Genode::Thread *myself = Genode::Thread::myself();
+	if (!myself)
+		return;
+	myself->free_secondary_stack(stack);
+}
