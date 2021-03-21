@@ -221,12 +221,15 @@ const struct res_sym __p_type_syms[] = { };
 
 using namespace Genode;
 
+/* need some space for Stack* structure as a part of stack */
+enum { ADDON_SIZE = 128 };
+
 extern "C" void *alloc_secondary_stack(char const *name, size_t stack_size)
 {
 	Genode::Thread *myself = Genode::Thread::myself();
 	if (!myself)
 		return nullptr;
-	void *ret = myself->alloc_secondary_stack(name, stack_size);
+	void *ret = myself->alloc_secondary_stack(name, stack_size + ADDON_SIZE);
 
 	char *c = reinterpret_cast<char *>(ret);
 	/* stack top is cleared by ABI-specific init_stack() */
