@@ -115,6 +115,7 @@ DUMMY(int   , -1, getrusage, (int, rusage *))
 DUMMY_SILENT(uid_t ,  0, getuid, (void))
 DUMMY_SILENT(int   ,  1, isatty, (int))
 DUMMY(int   , -1, link, (const char *, const char *))
+DUMMY(void  ,  , makecontenxt, (ucontext_t *, void (*)(void), int, ...));
 DUMMY(int   ,  0, minherit, (void *, size_t, int))
 DUMMY(int   , -1, mknod, (const char *, mode_t, dev_t))
 DUMMY(int   , -1, mprotect, (void *, size_t, int))
@@ -217,31 +218,3 @@ const struct res_sym __p_type_syms[] = { };
 
 } /* extern "C" */
 
-#include <base/thread.h>
-
-using namespace Genode;
-
-/* need some space for Stack* structure as a part of stack */
-enum { ADDON_SIZE = 128 };
-
-extern "C" void *alloc_secondary_stack(char const *name, size_t stack_size)
-{
-	Genode::Thread *myself = Genode::Thread::myself();
-	if (!myself)
-		return nullptr;
-	void *ret = myself->alloc_secondary_stack(name, stack_size + ADDON_SIZE);
-
-	char *c = reinterpret_cast<char *>(ret);
-	/* stack top is cleared by ABI-specific init_stack() */
-	Genode::memset(c - stack_size, 0, stack_size);
-
-	return (void *)(c - stack_size);
-}
-
-extern "C" void free_secondary_stack(void *stack)
-{
-	Genode::Thread *myself = Genode::Thread::myself();
-	if (!myself)
-		return;
-	myself->free_secondary_stack(stack);
-}
