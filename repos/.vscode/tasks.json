@@ -1,0 +1,55 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "go_app_dbg",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "-C",
+                "build/x86_64",
+                "run/go_app_dbg"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder:repos}/..",
+                "env": {
+                    "VERBOSE": "",
+                    "KERNEL": "nova",
+                    "MAKE_JOBS": "2",
+                    "CFLAGS": "-g -O0"
+                }
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+       {
+            "label": "go_app",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "-C",
+                "build/x86_64",
+                "run/go_app"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder:repos}/..",
+                "env": {
+                    "VERBOSE": "",
+                    "KERNEL": "sel4",
+                    "MAKE_JOBS": "2",
+                    "CFLAGS": "-g -O0"
+                }
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}

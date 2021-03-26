@@ -62,45 +62,33 @@ Libc::Mmap_registry *Libc::mmap_registry()
 	return &registry;
 }
 
-namespace Libc {
-
-	void anon_mmap_construct(Genode::Env &env, size_t default_size);
-}
-
+static Genode::Allocator *_alloc_ptr { nullptr };
 static Cwd          *_cwd_ptr;
 static unsigned int  _mmap_align_log2 { PAGE_SHIFT };
-static Genode::Allocator *_alloc_ptr;
-
-void Libc::init_file_operations(Env &env, Cwd &cwd,
-                                Config_accessor const &config_accessor,
-                                Genode::Allocator &alloc)
-{
-	/* by default 15 Mb for anon mmap allocator without predefined address */
-	enum { DEFAULT_SIZE = 15ul * 1024 * 1024 };
-	size_t default_size;
-	_cwd_ptr = &cwd;
-	_alloc_ptr = &alloc;
-
-	config_accessor.config().with_sub_node("libc", [&] (Xml_node libc) {
-		    libc.with_sub_node("mmap", [&] (Xml_node mmap) {
-				_mmap_align_log2 = mmap.attribute_value("align_log2",
-			                                            (unsigned int)PAGE_SHIFT);
-				default_size = mmap.attribute_value("local_area_default_size",
-													(size_t)DEFAULT_SIZE);
-		                                              });
-	});
-
-	anon_mmap_construct(env, default_size);
-}
 
 Genode::Allocator *kernel_allocator()
 {
 	if (_alloc_ptr)
 		return _alloc_ptr;
 
-	error("missing call of 'init_file_operations'");
+	error("missing call of 'init_file_operations' for _alloc_ptr");
 	return nullptr;
 }
+void Libc::init_file_operations(Cwd &cwd,
+								Config_accessor const &config_accessor,
+								Genode::Allocator &alloc)
+{
+	_cwd_ptr = &cwd;
+	_alloc_ptr = &alloc;
+
+	config_accessor.config().with_sub_node("libc", [&] (Xml_node libc) {
+		libc.with_sub_node("mmap", [&] (Xml_node mmap) {
+			_mmap_align_log2 = mmap.attribute_value("align_log2",
+			                                        (unsigned int)PAGE_SHIFT);
+		});
+	});
+}
+
 
 /***************
  ** Utilities **
@@ -162,8 +150,8 @@ void Libc::resolve_symlinks(char const *path, Absolute_path &resolved_path)
 
 		while (t) {
 			if (t.type() != Path_element_token::IDENT) {
-				t = t.next();
-				continue;
+					t = t.next();
+					continue;
 			}
 
 			t.string(path_element, sizeof(path_element));
@@ -434,49 +422,33 @@ extern "C" int mkdir(const char *path, mode_t mode)
 		resolve_symlinks_except_last_element(path, resolved_path);
 		resolved_path.remove_trailing('/');
 		FNAME_FUNC_WRAPPER(mkdir, resolved_path.base(), mode);
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
 
-namespace Genode {
-
-	char *pd_reserve_memory(size_t bytes, void *requested_addr,
-	                        size_t alignment_hint);
-	bool pd_unmap_memory(void *addr, size_t bytes, bool &area_used);
-	bool pd_commit_memory(void *addr, size_t size, bool exec, bool with_requested_addr);
-	void *pd_get_base_address(void *addr, bool &anon, size_t &size);
-}
 
 __SYS_(void *, mmap, (void *addr, ::size_t length,
                       int prot, int flags,
                       int libc_fd, ::off_t offset),
 {
+	/* handle requests for anonymous memory */
 	if ((flags & MAP_ANONYMOUS) || (flags & MAP_ANON)) {
 
-		/* handle requests for anonymous memory */
-		bool const executable = prot & PROT_EXEC;
+		if (flags & MAP_FIXED) {
+			Genode::error("mmap for fixed predefined address not supported yet");
+			errno = EINVAL;
+			return MAP_FAILED;
+		}
 
-		/* FIXME do not allow overlap with other areas as in original mmap() - just fail */
-		/* desired address given as addr (mandatory if flags has MAP_FIXED) */
-		void *start = Genode::pd_reserve_memory(length, addr, _mmap_align_log2);
-		if (!start || ((flags & MAP_FIXED) && (start != addr))) {
+		bool const executable = prot & PROT_EXEC;
+		void *start = mem_alloc(executable)->alloc(length, _mmap_align_log2);
+		if (!start) {
 			errno = ENOMEM;
 			return MAP_FAILED;
 		}
-		mmap_registry()->insert(start, length, 0);
-
-		if (prot == PROT_NONE) {
-
-			/* process request for memory range reservation (no access, no commit) */
-			 return start;
-		}
-
-		/* desired address returned; commit virtual range */
-		Genode::pd_commit_memory(start, length, executable, addr != 0);
-
-		/* zero commited ram */
 		::memset(start, 0, align_addr(length, PAGE_SHIFT));
+		mmap_registry()->insert(start, length, 0);
 		return start;
 	}
 
@@ -497,14 +469,9 @@ __SYS_(void *, mmap, (void *addr, ::size_t length,
 })
 
 
-extern "C" int munmap(void *base, ::size_t length)
+extern "C" int munmap(void *start, ::size_t length)
 {
-	bool nanon;
-	size_t size;
-	void *start = Genode::pd_get_base_address(base, nanon, size);
-	if (!start)
-		start = base;
-	if (nanon && !mmap_registry()->registered(start)) {
+	if (!mmap_registry()->registered(start)) {
 		warning("munmap: could not lookup plugin for address ", start);
 		errno = EINVAL;
 		return -1;
@@ -515,7 +482,7 @@ extern "C" int munmap(void *base, ::size_t length)
 	 *
 	 * If the pointer is NULL, 'start' refers to an anonymous mmap.
 	 */
-	Plugin *plugin = nanon ? mmap_registry()->lookup_plugin_by_addr(start) : 0;
+	Plugin *plugin = mmap_registry()->lookup_plugin_by_addr(start);
 
 	/*
 	 * Remove registry entry before unmapping to avoid double insertion error
@@ -524,18 +491,15 @@ extern "C" int munmap(void *base, ::size_t length)
 	mmap_registry()->remove(start);
 
 	int ret = 0;
-	if (plugin) {
+	if (plugin)
 		ret = plugin->munmap(start, length);
-	} else {
-		bool area_used = false;
-		Genode::pd_unmap_memory(base, length, area_used);
-		/* if we should not remove registry - reinsert it;
-		 * this could happens if we split internal area;
-		 * size should be original, not length of current area
-		 */
-		if (!(nanon && !area_used))
-			mmap_registry()->insert(start, size, 0);
+	else {
+		bool const executable = true;
+		/* XXX another metadata handling required to track anonymous memory */
+		mem_alloc(!executable)->free(start);
+		mem_alloc(executable)->free(start);
 	}
+
 	return ret;
 }
 
@@ -638,7 +602,8 @@ __SYS_(int, openat, (int libc_fd, const char *path, int flags, ...),
 })
 
 
-extern "C" int pipe(int pipefd[2]) { return pipe2(pipefd, 0); }
+extern "C" int pipe(int pipefd[2]) {
+	return pipe2(pipefd, 0); }
 
 
 extern "C" int pipe2(int pipefd[2], int flags)
@@ -682,7 +647,7 @@ extern "C" ssize_t readlink(const char *path, char *buf, ::size_t bufsiz)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(path, resolved_path);
 		FNAME_FUNC_WRAPPER(readlink, resolved_path.base(), buf, bufsiz);
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -699,7 +664,7 @@ extern "C" int rename(const char *oldpath, const char *newpath)
 		resolved_newpath.remove_trailing('/');
 
 		FNAME_FUNC_WRAPPER(rename, resolved_oldpath.base(), resolved_newpath.base());
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -723,7 +688,7 @@ extern "C" int rmdir(const char *path)
 		}
 
 		FNAME_FUNC_WRAPPER(rmdir, resolved_path.base());
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -736,7 +701,7 @@ extern "C" int stat(const char *path, struct stat *buf)
 		resolve_symlinks(path, resolved_path);
 		resolved_path.remove_trailing('/');
 		FNAME_FUNC_WRAPPER(stat, resolved_path.base(), buf);
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -748,7 +713,7 @@ extern "C" int symlink(const char *oldpath, const char *newpath)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(newpath, resolved_path);
 		FNAME_FUNC_WRAPPER(symlink, oldpath, resolved_path.base());
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
@@ -760,7 +725,7 @@ extern "C" int unlink(const char *path)
 		Absolute_path resolved_path;
 		resolve_symlinks_except_last_element(path, resolved_path);
 		FNAME_FUNC_WRAPPER(unlink, resolved_path.base());
-	} catch (Symlink_resolve_error) {
+	} catch(Symlink_resolve_error) {
 		return -1;
 	}
 }
