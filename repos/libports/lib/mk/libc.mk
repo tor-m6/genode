@@ -4,7 +4,7 @@
 LIBS   = libc-string libc-locale libc-stdlib libc-stdio libc-gen libc-gdtoa \
          libc-inet libc-stdtime libc-regex libc-compat libc-setjmp libc-mem \
          libc-resolv libc-isc libc-nameser libc-net libc-rpc libc-tzcode \
-         libc-libkern libc-context
+         libc-libkern
 
 LIBS  += base vfs
 

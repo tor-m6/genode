@@ -62,24 +62,14 @@ Libc::Mmap_registry *Libc::mmap_registry()
 	return &registry;
 }
 
-static Genode::Allocator *_alloc_ptr { nullptr };
+
 static Cwd          *_cwd_ptr;
 static unsigned int  _mmap_align_log2 { PAGE_SHIFT };
 
-Genode::Allocator *kernel_allocator()
-{
-	if (_alloc_ptr)
-		return _alloc_ptr;
-
-	error("missing call of 'init_file_operations' for _alloc_ptr");
-	return nullptr;
-}
 void Libc::init_file_operations(Cwd &cwd,
-								Config_accessor const &config_accessor,
-								Genode::Allocator &alloc)
+                                Config_accessor const &config_accessor)
 {
 	_cwd_ptr = &cwd;
-	_alloc_ptr = &alloc;
 
 	config_accessor.config().with_sub_node("libc", [&] (Xml_node libc) {
 		libc.with_sub_node("mmap", [&] (Xml_node mmap) {

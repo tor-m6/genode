@@ -1,11 +1,9 @@
 MIRROR_FROM_REP_DIR := lib/mk/spec/x86_32/libc-setjmp.mk \
                        lib/mk/spec/x86_64/libc-setjmp.mk \
                        lib/mk/spec/arm/libc-setjmp.mk \
-                       lib/mk/spec/x86_64/libc-context.mk \
                        lib/mk/libc-common.inc \
                        lib/import/import-libc.mk \
                        lib/import/import-libc-setjmp.mk \
-                       lib/import/import-libc-context.mk \
                        include/libc-genode/sys/syscall.h
 
 content: $(MIRROR_FROM_REP_DIR)

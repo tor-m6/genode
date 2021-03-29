@@ -99,6 +99,7 @@ DUMMY(u_int32_t, 0, __default_hash, (const void *, size_t));
 DUMMY_SILENT(long  , -1, _fpathconf, (int, int))
 DUMMY(long  , -1, fpathconf, (int, int))
 DUMMY(int   , -1, freebsd7___semctl, (void))
+DUMMY(int   , -1, getcontext, (ucontext_t *))
 DUMMY_SILENT(gid_t ,  0, getegid, (void))
 DUMMY_SILENT(uid_t ,  0, geteuid, (void))
 DUMMY_SILENT(gid_t ,  0, getgid, (void))
@@ -115,7 +116,6 @@ DUMMY(int   , -1, getrusage, (int, rusage *))
 DUMMY_SILENT(uid_t ,  0, getuid, (void))
 DUMMY_SILENT(int   ,  1, isatty, (int))
 DUMMY(int   , -1, link, (const char *, const char *))
-DUMMY(void  ,  , makecontenxt, (ucontext_t *, void (*)(void), int, ...));
 DUMMY(int   ,  0, minherit, (void *, size_t, int))
 DUMMY(int   , -1, mknod, (const char *, mode_t, dev_t))
 DUMMY(int   , -1, mprotect, (void *, size_t, int))
@@ -153,10 +153,12 @@ __SYS_DUMMY(int, -1, kevent, (int, const struct kevent*, int, struct kevent *, i
 __SYS_DUMMY(void  ,   , map_stacks_exec, (void));
 __SYS_DUMMY(int   , -1, ptrace, (int, pid_t, caddr_t, int));
 __SYS_DUMMY(ssize_t, -1, sendmsg, (int s, const struct msghdr*, int));
+__SYS_DUMMY(int   , -1, setcontext, (const ucontext_t *ucp));
 __SYS_DUMMY(void	,   , spinlock_stub,   (spinlock_t *));
 __SYS_DUMMY(void	,   , spinlock,   (spinlock_t *));
 __SYS_DUMMY(void	,   , spinunlock, (spinlock_t *));
 __SYS_DUMMY(void	,   , spinunlock_stub, (spinlock_t *));
+__SYS_DUMMY(int, -1, swapcontext, (ucontext_t *, const ucontext_t *));
 __SYS_DUMMY(int, -1, system, (const char *string));
 
 
